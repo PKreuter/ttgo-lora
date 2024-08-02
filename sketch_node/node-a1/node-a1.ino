@@ -2,16 +2,39 @@
 
 This is the LoRa Node Code 
 
+LILYGO / TTGO LORA - Model T3V1.6.1
+
+1) Node send a JSON String to LoRA Gateway
+{"data":[
+  {"name":"Test-Node","node":"0xA2","type":"lora","message":3,"temperature":0,"humidity":0,"pressure":0,"sensor_state":"low","diepostistda":"true","sensor_value":0,"vbattery":4.527970791}
+]}
+
+
+2) LoRa Gateway receive LoRa message
+3) LoRa Gateway add ts and send to MQTT over WiFi
+{"ts":1722536448,
+ "data":[
+  {"name":"Test-Node","node":"0xA2","type":"lora","message":763,"temperature":0,"humidity":0,"pressure":0,"sensor_state":"low","diepostistda":"true","sensor_value":70,"vbattery":4.519106388}
+]}
+
+
+
 
 CHANGES
-- change to IR based state
+- IR Sensor DFRobot SEN0523 change to analogInput
+
 
 RULES
 - Default with DEEP_SLEEP_MODE
 - Using RTC Memory to Store Data During Sleep
 - Place RTC_DATA_ATTR in front of any variable that you want to store in RTC memory. 
 
-Pull Widerstand 10K
+External Componets
+- IR Sensor DFRobot SEN0523
+- DHT22
+
+
+Pull Widerstand 10K nach 5V for sleepModePin
 
 */ 
 
@@ -34,14 +57,18 @@ Pull Widerstand 10K
 #include <DHT.h>
 #include <DHT_U.h>
 
+//Libraries to create Json Documents
 #include <ArduinoJson.h>
 
 
 // ENV
-const char* VERSION = "0.042";
+const char* VERSION = "0.043";
 const char* NAME = "Test-Node"; 
 byte localAddress = 0xA2;          // address of LoRa device
 const int DEEP_SLEEP = 60;         // seconds to Sleep, Default 900
+//const char* NAME = "Briefkasten"; 
+//byte localAddress = 0xA1;          // address of LoRa device
+//const int DEEP_SLEEP = 900;         // seconds to Sleep, Default 900
 // END
 
 
@@ -61,26 +88,24 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 #define BMP280 0x77
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-// set pin numbers, free 34, 13
 // digital IO of the sleep mode enable pin, 
 //  high=sleep enabled, default
 //  low=sleep disabled 
 const int sleepModePin = 13;
+// variable for reading the sleepmode
+int sleepModeState = HIGH;   
 
-// digital IO of the IR Sensor DFRobot SEN0523
-//  HIGH=IR unterbrochen, kein Licht seen
-//  LOW=IR Strecke OK
-const int sensorPin = 34;
+// analog IO of the IR Sensor DFRobot SEN0523
+const int sensorPin = 4;
+// variable for storing the pin value and states
+//  Value of 4095 => IR Strecke OK, State = False
+//  Value of < 1000 => IR Strecke unterbroachen, State = TRUE
+int sensorValue = 0;
+int sensorState = LOW;
 
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
 
-
-// variable for storing the pin states
-// sensorState HIGH=line Post, LOW=Post
-int sensorState = LOW;
-
-int sleepModeState = HIGH;   // variable for reading the sleepmode
 
 ////define OLED instance
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziierung
@@ -111,7 +136,7 @@ String LoRaMessage = "";
 // Using RTC Memory to Store Data During Sleep
 // Place RTC_DATA_ATTR in front of any variable that you want to store in RTC memory. 
 RTC_DATA_ATTR unsigned int msgCounter = 0;
-//RTC_DATA_ATTR uint64_t uptime = 0;
+
 
 byte destination = 0xAA;      // destination to send to
 long lastSendTime = 0;        // last send time
@@ -171,6 +196,7 @@ void showVersion(){
   display.display();
   delay(2 * mS_TO_S_FACTOR); 
 }
+
 
 //Initialize OLED Module
 void initOLED() {
@@ -275,6 +301,7 @@ void getDHTreadings() {
   }
 }
 
+
 //function for fetching BMP280 readings
 void getBMPreadings() {
   Pressure=bmp.readPressure()/133;
@@ -285,28 +312,17 @@ void getBMPreadings() {
 
 
 // 
-void getSensorState() {
-  sensorState = digitalRead(sensorPin);
-  if (sensorState == LOW) {
-    Serial.println("Sensor state: low");
+void getSensorValue() {
+  sensorValue = analogRead(sensorPin);
+  Serial.print("Sensor value: ");
+  Serial.print(sensorValue);
+  if (sensorValue < 3000) {
+    sensorState = LOW;
+    Serial.print(" - Sensor state: ");
   } else {
-    Serial.println("Sensor state: high");
+    sensorState = HIGH;
   }
-
-  /**
-  buttonState = digitalRead(buttonPin);
-  // check if the pushbutton is pressed.
-  // if it is, the buttonState is HIGH
-  if (buttonState == HIGH) {
-    // turn LED on
-    //  digitalWrite(ledPin, HIGH);
-    Serial.println("Die Post ist da: true");
-  } else {
-    // turn LED off
-    //  digitalWrite(ledPin, LOW);
-    Serial.println("Die Post ist da: false");
-  }
-  **/
+  Serial.println(sensorState);
 
 }
 
@@ -320,68 +336,58 @@ void getSleepModeState() {
 void getReadings() {
   getDHTreadings();
   //getBMPreadings();
-  //getButtonState();
-  getSensorState();
+  getSensorValue();
 }
 
 //Display Readings on OLED
 void displayReadings() {
   display.clearDisplay();
   display.setCursor(0,disPos_y0);
-  display.print("Running... Status: OK");
-  display.setCursor(0,disPos_y2);
+  display.print("RUNNING... Status: OK");
+  display.setCursor(0,disPos_y1);
   display.setTextSize(1);
-  display.print("TEMPERATURE");
-  display.setCursor(70,disPos_y2);
-  display.print(":");
-  display.setCursor(80,disPos_y2);
+  display.print("Temperature : ");
+  display.setCursor(80,disPos_y1);
   display.print(Temperature);
-  display.drawCircle(116,disPos_y2,1, WHITE);
-  display.setCursor(121,disPos_y2);
+  display.drawCircle(116,disPos_y1,1, WHITE);
+  display.setCursor(121,disPos_y1);
   display.print("C");
-  display.setCursor(0,disPos_y3);
-  display.print("HUMIDITY(%)");
-  display.setCursor(70,disPos_y3);
-  display.print(":");
-  display.setCursor(80,disPos_y3);
+  display.setCursor(0,disPos_y2);
+  display.print("Humidity(%) : ");
+  display.setCursor(80,disPos_y2);
   display.print(Humidity);
-  display.setCursor(116,disPos_y3);
+  display.setCursor(116,disPos_y2);
   display.print("Rh");
-  //display.setCursor(0,disPos_y4);
-  //display.print("PRESSURE");
-  //display.setCursor(50,disPos_y4);
-  //display.print(":");
-  //display.setCursor(60,disPos_y4);
-  //display.print(Pressure);
-  //display.setCursor(100,disPos_y4);
-  //display.print("mmHg");
+  display.setCursor(0,disPos_y3);
+  display.print("Pressure : ");
+  display.setCursor(62,disPos_y3);
+  display.print(Pressure);
+  display.setCursor(103,disPos_y3);
+  display.print("mmHg");
   display.setCursor(0,disPos_y4);
-  display.print("BATTERY");
-  display.setCursor(50,disPos_y4);
-  display.print(":");
+  display.print("Battery : ");
   display.setCursor(60,disPos_y4);
   display.print(VBAT);
-  display.setCursor(95,disPos_y4);
+  display.setCursor(98,disPos_y4);
   display.print("Volts");
   display.display();
 
   if (sensorState == LOW) {
     display.setCursor(0,disPos_y5);
-    display.print("Die Post :");
-    display.setCursor(80,disPos_y5);
-    display.print("1");
+    display.print("Die Post : TRUE / ");
+    display.setCursor(103,disPos_y5);
+    display.print(sensorValue);
   } else {
     display.setCursor(0,disPos_y5);
-    display.print("Die Post  :");
-    display.setCursor(80,disPos_y5);
-    display.print("0");
+    display.print("Die Post : FALSE / ");
+    display.setCursor(103,disPos_y5);
+    display.print(sensorValue);    
   }
   display.setCursor(0,disPos_y6);
   display.print("LoRa send :");
   display.setCursor(80,disPos_y6);
   display.print(msgCounter);
   display.display();  
-
 }
 
 void getVbat() {
@@ -396,19 +402,12 @@ void getVbat() {
   Serial.print("Battery: "); 
   Serial.print(VBAT); 
   Serial.println(" Volts");
-  //Serial.printf("Battery: = %s Volts\n", VBAT);
 }
 
 
 //Send data to receiver node using LoRa
 void sendReadings() {
   msgCounter++;
-
-  // calculate uptime (ms) + DEEP_SLEEP (us)
-  //uint64_t microSecondsSinceBoot = esp_timer_get_time();
-  //char x_uptime[64];
-  //uptime = uptime + ((microSecondsSinceBoot + (DEEP_SLEEP  * uS_TO_S_FACTOR)) / uM_TO_S_FACTOR);
-  //sprintf(x_uptime, "%llu", uptime);
 
   // localAddress as 0xAA
   char nodeAddress[10];
@@ -428,15 +427,13 @@ void sendReadings() {
   doc1["pressure"] = Pressure;
 
   if (sensorState == LOW) {
-    doc1["sensor"] = "seenNOK";
+    doc1["sensor_state"] = "low";
+    doc1["diepostistda"] = "true";
   } else {
-    doc1["sensor"] = "seenOK";
+    doc1["sensor_state"] = "high";
+    doc1["diepostistda"] = "false";
   }
-  if (sensorState == LOW) {
-    doc1["diepostistda"] = 1;
-  } else {
-    doc1["diepostistda"] = 0;
-  }
+  doc1["sensor_value"] = sensorValue;
   doc1["vbattery"] = VBAT;
   serializeJson(doc, jsonSerial);
 
@@ -453,7 +450,6 @@ void sendReadings() {
   Serial.println(jsonSerial);
    
   displayReadings();
-
 }
 
 
@@ -481,7 +477,7 @@ void loop() {
     //delay(9 * mS_TO_S_FACTOR); 
     esp_sleep_enable_timer_wakeup(DEEP_SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
-  }
+  } 
 
 }
 

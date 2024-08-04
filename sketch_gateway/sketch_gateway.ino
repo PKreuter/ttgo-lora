@@ -12,21 +12,22 @@ OLED SSD1306 I2C Address 0x3C
 50   MQTT message send
 
 
-File 'secrets.h'
+Sensitive config needs to stored in file 'secrets.h'
 
 // Network credentials
-const char* SECRET_WIFI_SSID = "ssid";      
+const char* SECRET_WIFI_SSID = "ssidname";      
 const char* SECRET_WIFI_PASSWORD = "password"; 
 
-// MQTT broker
-const char* SECRET_MQTT_USERNAME = "user";
+// MQTT credentials
+const char* SECRET_MQTT_USERNAME = "username";
 const char* SECRET_MQTT_PASSWORD = "password";
 
 */
 
 
-//
+//Sensitive configs
 #include "secrets.h"   // do store secrets, needs to edit before using
+
 #include "config.h"
 #include "mqtt.h"
 

@@ -1,5 +1,12 @@
 
-//
+
+
+//Version
+const char* VERSION = "0.012";
+const char* NAME = "Gateway"; 
+
+
+
 
 //define the pins used by the LoRa transceiver module
 #define SCK 5
@@ -21,7 +28,6 @@
 #define uS_TO_S_FACTOR 1000000  // conversion factor for micro seconds to seconds 
 
 
-const char* hostname = "ESP32_1";
 
 
 

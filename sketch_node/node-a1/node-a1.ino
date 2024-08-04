@@ -21,7 +21,7 @@ LILYGO / TTGO LORA - Model T3V1.6.1
 
 
 CHANGES
-- IR Sensor DFRobot SEN0523 change to analogInput
+- IR Sensor DFRobot SEN0523 change to Analog-Input
 
 
 RULES
@@ -61,15 +61,8 @@ Pull Widerstand 10K nach 5V for sleepModePin
 #include <ArduinoJson.h>
 
 
-// ENV
-const char* VERSION = "0.043";
-const char* NAME = "Test-Node"; 
-byte localAddress = 0xA2;          // address of LoRa device
-const int DEEP_SLEEP = 60;         // seconds to Sleep, Default 900
-//const char* NAME = "Briefkasten"; 
-//byte localAddress = 0xA1;          // address of LoRa device
-//const int DEEP_SLEEP = 900;         // seconds to Sleep, Default 900
-// END
+const int SLEEP = 60;         // seconds to Sleep
+const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900
 
 
 //Digital pin connected to the DHT sensor
@@ -91,9 +84,12 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 // digital IO of the sleep mode enable pin, 
 //  high=sleep enabled, default
 //  low=sleep disabled 
-const int sleepModePin = 13;
+const int sleep900ModePin = 13;
+const int sleep60ModePin = 14;
+
 // variable for reading the sleepmode
-int sleepModeState = HIGH;   
+int sleep900ModeState = LOW; 
+int sleep60ModeState = LOW;  
 
 // analog IO of the IR Sensor DFRobot SEN0523
 const int sensorPin = 4;
@@ -163,7 +159,8 @@ void setup() {
   // initialize the IR pin as an input, die-post
   pinMode(sensorPin, INPUT);
   // initialize the pushbutton pin as an input, display on/off
-  pinMode(sleepModePin, INPUT);
+  pinMode(sleep900ModePin, INPUT);
+  pinMode(sleep60ModePin, INPUT);
 
   // initialize Sensors/OLED/LoRa
   initDHT();
@@ -177,9 +174,10 @@ void setup() {
 
   getSleepModeState();
   Serial.print("Deep sleep mode enabled: ");
-  if (sleepModeState == HIGH) {
+  if (sleep900ModeState == LOW) {
     Serial.println("true");
-  } else {
+  }
+  else {
     Serial.println("false");
   }
 
@@ -329,7 +327,8 @@ void getSensorValue() {
 void getSleepModeState() {
   // HIGH = Deep Sleep Mode enabled
   // LOW = Deep Sleep Mode disabled
-  sleepModeState = digitalRead(sleepModePin);
+  sleep900ModeState = digitalRead(sleep900ModePin);
+  sleep60ModeState = digitalRead(sleep60ModePin);
 }
 
 //function for fetching All readings at once
@@ -467,17 +466,26 @@ void loop() {
   getSleepModeState();
 
   // check for sleep mode
-  if (sleepModeState == HIGH) {
-    display.dim(true);
     /**
     Nomalbetrieb ~40 mA
     Deep Sleep Mode ~3 mA
     Deep Sleep Mode mit Display=on ~10mA
     **/
-    //delay(9 * mS_TO_S_FACTOR); 
+  if (sleep900ModeState == LOW) {
+    Serial.printf("Go into deep sleep mode for %i seconds\n", DEEP_SLEEP);
+    display.dim(true);
     esp_sleep_enable_timer_wakeup(DEEP_SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
   } 
+  else if (sleep60ModeState == LOW) {
+    Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
+    display.dim(true);
+    esp_sleep_enable_timer_wakeup(SLEEP * uS_TO_S_FACTOR);
+    esp_deep_sleep_start(); 
+  } 
+  else {
+    Serial.println("Go to next ...");
+  }
 
 }
 

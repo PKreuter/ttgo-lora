@@ -11,12 +11,23 @@ OLED SSD1306 I2C Address 0x3C
 40   LoRa received
 50   MQTT message send
 
+
+File 'secrets.h'
+
+// Network credentials
+const char* SECRET_WIFI_SSID = "ssid";      
+const char* SECRET_WIFI_PASSWORD = "password"; 
+
+// MQTT broker
+const char* SECRET_MQTT_USERNAME = "user";
+const char* SECRET_MQTT_PASSWORD = "password";
+
 */
 
 
 //
+#include "secrets.h"   // do store secrets, needs to edit before using
 #include "config.h"
-#include "wifi.h" 
 #include "mqtt.h"
 
 #include <Ticker.h>
@@ -45,10 +56,6 @@ OLED SSD1306 I2C Address 0x3C
 char jsonSerial[500];  // length of JSON
 JsonDocument doc;      // to store input
 JsonDocument json_val; // 
-
-
-const char* VERSION = "0.012";
-const char* NAME = "Gateway"; 
 
 
 // Create objects to handle MQTT client
@@ -245,8 +252,8 @@ void getLoRaData() {
 
 void connectToWifi() {
   //Serial.printf("Connecting to WiFi '%s' ...\n", WIFI_SSID);
-  Serial.printf("Connecting to WiFi '%s' .", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.printf("Connecting to WiFi '%s' .", SECRET_WIFI_SSID);
+  WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -334,7 +341,7 @@ void setup() {
   mqttClient.onDisconnect(onMqttDisconnect);
   mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
-  mqttClient.setCredentials(MQTT_USERNAME, MQTT_PASSWORD);
+  mqttClient.setCredentials(SECRET_MQTT_USERNAME, SECRET_MQTT_PASSWORD);
   
   connectToMqtt();
 

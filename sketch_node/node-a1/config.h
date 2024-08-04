@@ -1,6 +1,17 @@
 
 
 
+//Version
+const char* VERSION = "0.043";
+
+const char* NAME = "Test-Node"; 
+byte localAddress = 0xA2;          // address of LoRa device
+
+//const char* NAME = "Briefkasten"; 
+//byte localAddress = 0xA1;          // address of LoRa device
+
+
+
 //define the pins used by the LoRa transceiver module
 #define SCK 5
 #define MISO 19

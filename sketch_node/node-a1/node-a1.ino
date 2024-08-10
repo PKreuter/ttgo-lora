@@ -36,9 +36,30 @@ External Componets
 
 Pull Widerstand 10K nach 5V for sleepModePin
 
+  //Increments boot number and prints it every reboot
+  bootCount++;
+  Serial.println("Boot number: " + String(bootCount));
+
+PINs, welche wahrscheinlich reserviert sind
+  0   Boot
+  12  ??
+PIN's for IO
+  2   Deep Sleep
+  4   Sensor
+  13  Sleep
+  14  LED Pin / MOS-FET to enabled Power for Sensors
+  25  DHT Sensor ????
+  34  Wakeup
+  35  interval VBAT
+
+
+Zum Download vua USB muss PIN open sein
+
 */ 
 
 #include "config.h" 
+
+#include "sensor.h"
 
 //Libraries for LoRa
 #include <Wire.h>
@@ -61,10 +82,6 @@ Pull Widerstand 10K nach 5V for sleepModePin
 #include <ArduinoJson.h>
 
 
-const int SLEEP = 60;         // seconds to Sleep
-const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900
-
-
 //Digital pin connected to the DHT sensor
 #define DHTPIN 25
 #define DHTTYPE DHT22 
@@ -81,27 +98,21 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 #define BMP280 0x77
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-// digital IO of the sleep mode enable pin, 
-//  high=sleep enabled, default
-//  low=sleep disabled 
-const int sleep900ModePin = 13;
-const int sleep60ModePin = 14;
-
+// digital IO as Input, the sleep mode enable pin, 
+//  high=sleep enabled, default; low=sleep disabled 
+const int sleepDeepModePin = 2;
+const int sleepModePin = 13;
 // variable for reading the sleepmode
-int sleep900ModeState = LOW; 
-int sleep60ModeState = LOW;  
+int sleepMode = 0;   // 0=no sleep, 1=deep, 2=short
 
-// analog IO of the IR Sensor DFRobot SEN0523
-const int sensorPin = 4;
-// variable for storing the pin value and states
-//  Value of 4095 => IR Strecke OK, State = False
-//  Value of < 1000 => IR Strecke unterbroachen, State = TRUE
-int sensorValue = 0;
-int sensorState = LOW;
+// digital IO as Output
+const int ledPin =  14;
+
+//const char* wakeUpPin = GPIO_NUM_34;
+#define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
 
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
-
 
 ////define OLED instance
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziierung
@@ -129,9 +140,10 @@ int readingID = 0;
 String LoRaMessage = "";
 
 
-// Using RTC Memory to Store Data During Sleep
+// Using RTC Memory to Store Data During Sleep, so that it will not be deleted during the deep sleep
 // Place RTC_DATA_ATTR in front of any variable that you want to store in RTC memory. 
 RTC_DATA_ATTR unsigned int msgCounter = 0;
+RTC_DATA_ATTR int bootCount = 0; 
 
 
 byte destination = 0xAA;      // destination to send to
@@ -147,7 +159,6 @@ char jsonSerial[500];
 
 
 
-
 void setup() {
 
   //initialize Serial Monitor
@@ -156,12 +167,18 @@ void setup() {
 
   // Battery Pin as an input 
   pinMode(vbatPin, INPUT);
+ 
+  // initialize the pushbutton pin as an input, display on/off
+  pinMode(sleepDeepModePin, INPUT_PULLUP);
+  pinMode(sleepModePin, INPUT_PULLUP);
+
   // initialize the IR pin as an input, die-post
   pinMode(sensorPin, INPUT);
-  // initialize the pushbutton pin as an input, display on/off
-  pinMode(sleep900ModePin, INPUT);
-  pinMode(sleep60ModePin, INPUT);
 
+    // initialize the LED pin as an output
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);
+ 
   // initialize Sensors/OLED/LoRa
   initDHT();
   //initBMP();
@@ -169,17 +186,39 @@ void setup() {
   showVersion();
   initLoRa();
 
-  // sleep to hold messages on display
-  delay(2 * mS_TO_S_FACTOR);
+  //Increments boot number and prints it every reboot
+  bootCount++;
+  Serial.println("Boot number: " + String(bootCount));
+
+  //Print the wakeup reason for ESP32
+  print_wakeup_reason();
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1); //1 = High, 0 = Low
 
   getSleepModeState();
-  Serial.print("Deep sleep mode enabled: ");
-  if (sleep900ModeState == LOW) {
-    Serial.println("true");
+  Serial.print("Sleep mode: ");
+  if (sleepMode == 1) {
+    Serial.println("deep");
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setCursor(0,50);
+    display.print("SLEEP Mode 1 DEEP");
+    display.display();
+  }
+  else if (sleepMode == 2) {
+    Serial.println("short");
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setCursor(0,50);
+    display.print("SLEEP Mode 2");
+    display.display();
   }
   else {
-    Serial.println("false");
+    Serial.println("no");
   }
+
+  // sleep to hold messages on display
+  delay(2 * mS_TO_S_FACTOR);
 
 }
 
@@ -227,6 +266,15 @@ void initLoRa() {
   SPI.begin(SCK, MISO, MOSI, SS);
   //setup LoRa transceiver module
   LoRa.setPins(SS, RST, DIO0);
+
+  /*
+  Der Spreading Factor (SF) beschreibt dabei wieviele Chirps, also Daten Carrier pro Sekunde übertragen werden. 
+  Dadurch ist die Bitrate, pro Symbol abgestrahlte Energie und die Reichweite definiert. 
+  Dabei wurde bei LoRa die „Adaptive Data Rate“ eingeführt: 
+  je nach Netzwerk Konfiguration wird über den Sender der Spreading Faktor zwischen SF7 und SF12 eingestellt.
+  SF7 = range 2km, time on air 61ms, 5470bps
+  **/
+  LoRa.setSpreadingFactor(7);
   
   if (!LoRa.begin(BAND)) {
     Serial.println("Starting LoRa failed!");
@@ -309,33 +357,62 @@ void getBMPreadings() {
 }
 
 
-// 
-void getSensorValue() {
-  sensorValue = analogRead(sensorPin);
-  Serial.print("Sensor value: ");
-  Serial.print(sensorValue);
-  if (sensorValue < 3000) {
-    sensorState = LOW;
-    Serial.print(" - Sensor state: ");
-  } else {
-    sensorState = HIGH;
-  }
-  Serial.println(sensorState);
+void getSleepModeState() {
+  // LOW = Sleep Mode enabled
+  
+  int sleepDeepModePinState = HIGH;
+  sleepDeepModePinState = digitalRead(sleepDeepModePin);
+  int sleepModePinState = HIGH;
+  sleepModePinState = digitalRead(sleepModePin);
+  
+  Serial.print("PIN: ");
+  Serial.print(sleepDeepModePin);
+  Serial.print(" Deep Sleep State: ");
+  Serial.println(sleepDeepModePinState);
+  Serial.print("PIN: ");
+  Serial.print(sleepModePin);
+  Serial.print(" Pin State: ");
+  Serial.println(sleepModePinState);
 
+  if (digitalRead(sleepDeepModePin) == HIGH) {
+    sleepMode = 1;
+  } 
+  else if (digitalRead(sleepModePin) == HIGH) {
+    sleepMode = 2;
+  }  
+  Serial.print("Sleep Mode: ");
+  Serial.println(sleepMode);
 }
 
-void getSleepModeState() {
-  // HIGH = Deep Sleep Mode enabled
-  // LOW = Deep Sleep Mode disabled
-  sleep900ModeState = digitalRead(sleep900ModePin);
-  sleep60ModeState = digitalRead(sleep60ModePin);
+
+/*
+Method to print the reason by which ESP32
+has been awaken from sleep
+*/
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
 }
 
 //function for fetching All readings at once
 void getReadings() {
   getDHTreadings();
   //getBMPreadings();
-  getSensorValue();
+  
+  /** Sensor ebane one of them **/
+  //getButtonState();     // as digital IO based on Press-Button
+  getSensorValue();   // as analog IO based on IR sensor
 }
 
 //Display Readings on OLED
@@ -416,7 +493,6 @@ void sendReadings() {
   char jsonSerial[500];
   JsonArray data = doc["data"].to<JsonArray>();
   JsonObject doc1 = data.createNestedObject();
-  //doc1["uptime"] = x_uptime;    // millis
   doc1["name"] = NAME;
   doc1["node"] = nodeAddress;
   doc1["type"] = "lora";
@@ -425,6 +501,7 @@ void sendReadings() {
   doc1["humidity"] = Humidity;
   doc1["pressure"] = Pressure;
 
+  doc1["sensor_value"] = sensorValue;
   if (sensorState == LOW) {
     doc1["sensor_state"] = "low";
     doc1["diepostistda"] = "true";
@@ -432,8 +509,9 @@ void sendReadings() {
     doc1["sensor_state"] = "high";
     doc1["diepostistda"] = "false";
   }
-  doc1["sensor_value"] = sensorValue;
+
   doc1["vbattery"] = VBAT;
+
   serializeJson(doc, jsonSerial);
 
   //Send LoRa packet to receiver
@@ -447,10 +525,27 @@ void sendReadings() {
 
   Serial.printf("Packet Sent: %d\n", msgCounter);
   Serial.println(jsonSerial);
-   
+
+  // sleep for LoRa and Power Sensor
+  if (sleepMode >= 1) {
+    LoRa.sleep();
+    digitalWrite(ledPin, LOW);
+  }
+
   displayReadings();
+
 }
 
+
+// prepare for sleep
+void do_ready_for_sleep() {
+  display.dim(true);
+  display.clearDisplay();
+  ////LoRa.end();
+  //LoRa.sleep();
+  //digitalWrite(ledPin, LOW);
+
+}
 
 
 void loop() {
@@ -460,7 +555,7 @@ void loop() {
   sendReadings();
 
   // sleep to hold messages on display
-  delay(5 * mS_TO_S_FACTOR); 
+  delay(2 * mS_TO_S_FACTOR); 
   
   // check sleep mode state
   getSleepModeState();
@@ -468,24 +563,25 @@ void loop() {
   // check for sleep mode
     /**
     Nomalbetrieb ~40 mA
-    Deep Sleep Mode ~3 mA
     Deep Sleep Mode mit Display=on ~10mA
+    Deep Sleep Mode ~5 mA
+    Zuseatzlich mit LoRa.sleep() ~2mA
+    Wenn Sensor mit Power dann switch-off sensor = ~2mA
     **/
-  if (sleep900ModeState == LOW) {
+  if (sleepMode == 1) {
     Serial.printf("Go into deep sleep mode for %i seconds\n", DEEP_SLEEP);
-    display.dim(true);
+    //display.dim(true);
+    do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup(DEEP_SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
   } 
-  else if (sleep60ModeState == LOW) {
+  else if (sleepMode == 2) {
     Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
-    display.dim(true);
+    //display.dim(true);
+    do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup(SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start(); 
   } 
-  else {
-    Serial.println("Go to next ...");
-  }
 
 }
 

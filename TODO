@@ -1,1 +1,8 @@
- 
+
+
+
+LoRa Gateway include Webserver
+
+Encrypt LoRa Messages between Node and Gateway
+MQTT via mTLS
+

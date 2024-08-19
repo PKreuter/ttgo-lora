@@ -2,10 +2,11 @@
 
 
 //Version
-const char* VERSION = "0.012";
+const char* VERSION = "0.014a";
 const char* NAME = "Gateway"; 
 
-
+//const long intervalMillis = 10000;  // TEST, interval for liveness
+const long intervalMillis = 300000;  // interval for liveness
 
 
 //define the pins used by the LoRa transceiver module

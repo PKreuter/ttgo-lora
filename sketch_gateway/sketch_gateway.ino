@@ -71,8 +71,7 @@ NTPClient timeClient(ntpUDP);
 
 // heartbeat
 unsigned long previousMillis = 0;    // Stores last time temperature was published
-//const long intervalMillis = 10000;  // TEST, interval for liveness
-const long intervalMillis = 300000;  // interval for liveness
+
 
 unsigned long loraPacketRecv = 0;   // counter number of messages
 byte localAddress = 0xAA;           // address of this device
@@ -86,9 +85,15 @@ String epochtime;
 String loraRecvFrom;
 String DATA;
 
+// LoRa
+String loraRssi;
+String loraSnr;
+
 // Wifi data
-String rssiLoRa;
 String rssiWiFi;
+
+// store number of MQTT messages
+String publishMsgCount = "0";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -99,14 +104,21 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziier
 // OLED line 1..6, writePixel (x, y, color)
 int disPos_y0 = 0;
 int disPos_y1 = 11;
-int disPos_y2 = 20;
-int disPos_y3 = 29;
+int disPos_y2 = 19;
+int disPos_y3 = 28;
+
 int disPos_y4 = 38;
 int disPos_y5 = 47;
 int disPos_y6 = 56;
 
 WiFiClient espClient;
 
+
+const char* PARAM_MESSAGE = "message";
+
+void notFound(AsyncWebServerRequest *request) {
+    request->send(404, "text/plain", "Not found");
+}
 
 
 void showVersion(){
@@ -177,6 +189,7 @@ void initLoRA() {
   delay(2000);
 }
 
+
 //-----------------Read LoRa packet and get the sensor readings-----------------------//
 void getLoRaData() {
   Serial.println("Lora packet received: ");
@@ -201,8 +214,10 @@ void getLoRaData() {
   Serial.println("Snr: " + String(LoRa.packetSnr()));
   Serial.println();
 
-  // Get RSSI
-  rssiLoRa = LoRa.packetRssi();
+
+  // Get 
+  loraRssi = LoRa.packetRssi();
+  loraSnr = LoRa.packetSnr();
 
  // if the recipient isn't this device or broadcast,
  if (recipient != localAddress && recipient != 0xFF) {
@@ -211,13 +226,13 @@ void getLoRaData() {
     return;               // skip rest of function
   }
 
-  display.setCursor(0,45);
+  display.setCursor(0,disPos_y5);
   // reset line
   display.setTextColor(BLACK, BLACK);
   display.println("                             "); 
   //  display.setTextColor(WHITE);  
   display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,45);
+  display.setCursor(0,disPos_y5);
   display.printf("LoRa recv: %s", String(loraPacketRecv));
 
   // Read packet
@@ -227,7 +242,7 @@ void getLoRaData() {
     Serial.print("LoRa Data: ");
     Serial.print(DATA); 
     Serial.print(" with RSSI ");    
-    Serial.println(rssiLoRa);
+    Serial.println(loraRssi);
 
     if(DATA.indexOf("data") > 0) {
       // Serial.print("is JSON: ");
@@ -237,16 +252,18 @@ void getLoRaData() {
       json_val = doc["data"];
     } 
 
+
+
   }
 
-  display.setCursor(0,30);
+  display.setCursor(0,disPos_y6);
   // reset line
   display.setTextColor(BLACK, BLACK);
   display.println("                             "); 
   //  display.setTextColor(WHITE);  
   display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,30);
-  display.printf("LoRa RSSI: %s", String(rssiLoRa));
+  display.setCursor(0,disPos_y6);
+  display.printf("LoRa RSSI: %s", String(loraRssi));
   display.display();
 
 }
@@ -283,8 +300,10 @@ void connectToMqtt() {
 
 void WiFiEvent(WiFiEvent_t event) {
   Serial.printf("[WiFi-event] event: %d\n", event);
-  
   switch(event) {
+    //case SYSTEM_EVENT_STA_START:
+    //    Serial.println("WiFi Started");
+    //    break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
       Serial.printf("\nWiFi connected, IP address: %s\n", WiFi.localIP().toString());
       Serial.printf("WiFi RSSI: %d\r\n", WiFi.RSSI());
@@ -296,8 +315,14 @@ void WiFiEvent(WiFiEvent_t event) {
       xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
       xTimerStart(wifiReconnectTimer, 0);
       break;
+    //case SYSTEM_EVENT_STA_DISCONNECTED:
+    //    Serial.println("WiFi lost connection");
+    //    xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+		//    xTimerStart(wifiReconnectTimer, 0);
+    //    break;
   }
 }
+
 
 
 void onMqttConnect(bool sessionPresent) {
@@ -316,6 +341,8 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 
 void onMqttPublish(uint16_t packetId) {
   Serial.printf(" Received acknowledged for packetId %s\n", String(packetId));
+  publishMsgCount = String(packetId);
+
 }
 
 void setup() {
@@ -349,10 +376,101 @@ void setup() {
   uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_GW_ONLINE, 1, true, "true");
   Serial.printf("Publishing on topic %s at QoS 1, packetId %i: ", MQTT_PUB_GW_ONLINE, packetIdPub3);
 
+
+
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "Hello, world");
+    });
+
+
+server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+  request->send(200, "application/json", "{\"status\":\"up\"}");
+});
+
+
+server.on("/tech", HTTP_GET, [](AsyncWebServerRequest *request) {
+  StaticJsonDocument<500> data;
+  timeClient.update();
+  long ts = timeClient.getEpochTime(); 
+  data["ts"] = ts;
+  data["Wifi RSSI"] = rssiWiFi;
+  data["LoRa Packets received"] = loraPacketRecv;
+  data["MQTT Server"] = MQTT_BROKER;
+  data["MQTT Status"] = "online";
+  data["MQTT Packets published"] = publishMsgCount;
+
+  String response;
+  serializeJson(data, response);
+  request->send(200, "application/json", response);
+});
+
+
+server.on("/get-message", HTTP_GET, [](AsyncWebServerRequest *request) {
+  StaticJsonDocument<100> data;
+  if (request->hasParam("message"))
+  {
+    data["message"] = request->getParam("message")->value();
+  }
+  else {
+    data["message"] = "No message parameter";
+  }
+  String response;
+  serializeJson(data, response);
+  request->send(200, "application/json", response);
+});
+
+
+    // Send a POST request to <IP>/post with a form field message set to <message>
+    server.on("/post", HTTP_POST, [](AsyncWebServerRequest *request){
+        String message;
+        if (request->hasParam(PARAM_MESSAGE, true)) {
+            message = request->getParam(PARAM_MESSAGE, true)->value();
+        } else {
+            message = "No message sent";
+        }
+        request->send(200, "text/plain", "Hello, POST: " + message);
+    });
+
+    server.onNotFound(notFound);
+
+    server.begin();
+
+
+
+}
+
+void update_display() {
+
+  display.setCursor(0,0);
+  // reset line
+  display.setTextColor(BLACK, BLACK);
+  display.println("                             "); 
+  //  display.setTextColor(WHITE);  
+  display.setTextColor(WHITE, BLACK);
+  display.setCursor(0,0);
+  display.print("Running... Status: OK");   
+  display.display();   
+  display.setCursor(0,disPos_y2);
+  display.print("WiFi RSSI: ");   
+  display.setCursor(70,disPos_y2);
+  display.print(rssiWiFi);      
+
+  // reset line
+  display.setCursor(0, disPos_y3);
+  display.setTextColor(BLACK, BLACK);
+  display.println("                             "); 
+  //  display.setTextColor(WHITE);  
+  display.setTextColor(WHITE, BLACK);
+  // write new
+  display.setCursor(0, disPos_y3);
+  display.printf("MQTT send: %s", publishMsgCount);
+  display.display();
+
 }
 
 
 void loop() {
+
   // Check if there are LoRa packets available
   int packetSize = LoRa.parsePacket();
   if (packetSize) {
@@ -378,6 +496,9 @@ void loop() {
       JsonDocument doc;
       char jsonSerial[500];
       doc["ts"] = ts;
+      doc["lora_rssi"] = loraRssi;
+      doc["lora_snr"] = loraSnr;
+
       doc["data"] = json_val;
       serializeJson(doc, jsonSerial);
       loraRecvFrom = "/" + loraRecvFrom;
@@ -386,19 +507,9 @@ void loop() {
       uint16_t packetIdPub0 = mqttClient.publish(String(topic).c_str(), 1, true, jsonSerial);
       Serial.printf("Publishing on topic %s at QoS 1, packetId: %i: Message %s\n", 
         topic.c_str(), packetIdPub0, jsonSerial);
-
-      // reset line
-      display.setCursor(0, disPos_y6);
-      display.setTextColor(BLACK, BLACK);
-      display.println("                             "); 
-      //  display.setTextColor(WHITE);  
-      display.setTextColor(WHITE, BLACK);
-      // write new
-      display.setCursor(0, disPos_y6);
-      display.printf("MQTT send: %i", packetIdPub0);
-      display.display();
-  
     }
+ 
+
 
   }
 
@@ -411,17 +522,16 @@ void loop() {
     // send heartbeat
     uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_GW_LIVENESS, 1, true, String("true").c_str());
     Serial.printf("Publishing on topic %s at QoS 1, packetId: %i\n", MQTT_PUB_GW_LIVENESS, packetIdPub1);
-
+  
     // send WiFi RSSI
     {
+      timeClient.update();
       long ts = timeClient.getEpochTime(); 
       doc["ts"] = ts;
       doc["value"] = rssiWiFi;
       doc["units"] = "dbm";
       serializeJson(doc, jsonSerial);
       String topic = MQTT_PUB_GW_RSSI;
-      //Serial.printf("%s\n",topic.c_str());
-      //Serial.printf("%s\n",MQTT_PUB_GW_RSSI);
       uint16_t packetIdPub2 = mqttClient.publish(String(topic).c_str(), 1, true, jsonSerial);
       Serial.printf("Publishing on topic %s at QoS 1, packetId %i: Message: %s\n", 
          topic.c_str(), packetIdPub2, jsonSerial);
@@ -429,19 +539,11 @@ void loop() {
 
   }
 
-  display.setCursor(0,0);
-  // reset line
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  //  display.setTextColor(WHITE);  
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,0);
-  display.print("Running... Status: OK");   
-  display.display();   
-  display.setCursor(0,20);
-  display.print("WiFi RSSI: ");   
-  display.setCursor(70,20);
-  display.print(rssiWiFi);         
+  update_display();   
 
 }
+
+
+
+
 

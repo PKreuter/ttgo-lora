@@ -19,8 +19,8 @@ LILYGO / TTGO LORA - Model T3V1.6.1
 
 
 
-
 CHANGES
+- US
 - IR Sensor DFRobot SEN0523 change to Analog-Input
 
 
@@ -48,12 +48,12 @@ PIN's for IO
   4   Sensor
   13  Sleep
   14  LED Pin / MOS-FET to enabled Power for Sensors
-  25  DHT Sensor ????
+  25  DHT Sensor
   34  Wakeup
   35  interval VBAT
 
 
-Zum Download vua USB muss PIN open sein
+Zum Download via USB muss PIN open sein
 
 */ 
 
@@ -98,11 +98,11 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 #define BMP280 0x77
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-// digital IO as Input, the sleep mode enable pin, 
-//  high=sleep enabled, default; low=sleep disabled 
+// Define Sleep Mode 
+// HIGH=sleep enabled, default; LOW=sleep disabled 
 const int sleepDeepModePin = 2;
 const int sleepModePin = 13;
-// variable for reading the sleepmode
+// variable for store the sleepmode
 int sleepMode = 0;   // 0=no sleep, 1=deep, 2=short
 
 // digital IO as Output
@@ -159,23 +159,26 @@ char jsonSerial[500];
 
 
 
+
 void setup() {
 
   //initialize Serial Monitor
   Serial.begin(115200);
   Serial.println("***LoRa Node - Version " +String(VERSION));
 
-  // Battery Pin as an input 
+  // Battery Pin as an analog input 
   pinMode(vbatPin, INPUT);
  
-  // initialize the pushbutton pin as an input, display on/off
+  // initialize the pushbutton pin as a digital input, display on/off
   pinMode(sleepDeepModePin, INPUT_PULLUP);
   pinMode(sleepModePin, INPUT_PULLUP);
 
   // initialize the IR pin as an input, die-post
-  pinMode(sensorPin, INPUT);
+  //pinMode(sensorPin, INPUT);
 
-    // initialize the LED pin as an output
+  initSensorUS();
+
+  // initialize the LED pin as an output
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, HIGH);
  
@@ -195,6 +198,7 @@ void setup() {
 
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1); //1 = High, 0 = Low
 
+  // get and print sleep mode to OLED
   getSleepModeState();
   Serial.print("Sleep mode: ");
   if (sleepMode == 1) {
@@ -231,7 +235,6 @@ void showVersion(){
   display.print("LoRa Node: 0x");
   display.println(localAddress, HEX);
   display.display();
-  delay(2 * mS_TO_S_FACTOR); 
 }
 
 
@@ -359,7 +362,6 @@ void getBMPreadings() {
 
 void getSleepModeState() {
   // LOW = Sleep Mode enabled
-  
   int sleepDeepModePinState = HIGH;
   sleepDeepModePinState = digitalRead(sleepDeepModePin);
   int sleepModePinState = HIGH;
@@ -374,13 +376,19 @@ void getSleepModeState() {
   Serial.print(" Pin State: ");
   Serial.println(sleepModePinState);
 
+  Serial.print("Sleep Mode: ");
   if (digitalRead(sleepDeepModePin) == HIGH) {
     sleepMode = 1;
+    Serial.print("enabled - ");
   } 
   else if (digitalRead(sleepModePin) == HIGH) {
     sleepMode = 2;
-  }  
-  Serial.print("Sleep Mode: ");
+    Serial.print("enabled - ");
+  } 
+  else { 
+    sleepMode = 0;
+    Serial.print(" disabled - ");
+  }
   Serial.println(sleepMode);
 }
 
@@ -410,9 +418,9 @@ void getReadings() {
   getDHTreadings();
   //getBMPreadings();
   
-  /** Sensor ebane one of them **/
+  /** Sensor ebable one of them **/
   //getButtonState();     // as digital IO based on Press-Button
-  getSensorValue();   // as analog IO based on IR sensor
+  getSensorUSValue();     // as analog IO
 }
 
 //Display Readings on OLED
@@ -448,21 +456,19 @@ void displayReadings() {
   display.print("Volts");
   display.display();
 
-  if (sensorState == LOW) {
+  if (sensorState == LOW && sensorValue == 0) {
     display.setCursor(0,disPos_y5);
-    display.print("Die Post : TRUE / ");
-    display.setCursor(103,disPos_y5);
-    display.print(sensorValue);
+    display.printf("Post : ERROR / %i", sensorValue);
+  }
+  else if (sensorState == LOW) {
+    display.setCursor(0,disPos_y5);
+    display.printf("Post :   TRUE / %i", sensorValue);
   } else {
     display.setCursor(0,disPos_y5);
-    display.print("Die Post : FALSE / ");
-    display.setCursor(103,disPos_y5);
-    display.print(sensorValue);    
+    display.printf("Post :   FALSE / %i", sensorValue);
   }
   display.setCursor(0,disPos_y6);
-  display.print("LoRa send :");
-  display.setCursor(80,disPos_y6);
-  display.print(msgCounter);
+  display.printf("LoRa send : %i", msgCounter);
   display.display();  
 }
 
@@ -475,9 +481,7 @@ void getVbat() {
   then double it (note above that Adafruit halves the voltage), then multiply that by the reference voltage of the ESP32 which 
   is 3.3V and then vinally, multiply that again by the ADC Reference Voltage of 1100mV.
   */
-  Serial.print("Battery: "); 
-  Serial.print(VBAT); 
-  Serial.println(" Volts");
+  Serial.printf("Battery: %.2f Volts", VBAT); 
 }
 
 
@@ -502,7 +506,11 @@ void sendReadings() {
   doc1["pressure"] = Pressure;
 
   doc1["sensor_value"] = sensorValue;
-  if (sensorState == LOW) {
+  if (sensorState == LOW && sensorValue == 0) {
+    doc1["sensor_state"] = "error";
+    doc1["diepostistda"] = "not-defined";
+  }
+  else if (sensorState == LOW) {
     doc1["sensor_state"] = "low";
     doc1["diepostistda"] = "true";
   } else {
@@ -541,10 +549,9 @@ void sendReadings() {
 void do_ready_for_sleep() {
   display.dim(true);
   display.clearDisplay();
-  ////LoRa.end();
+  //LoRa.end();
   //LoRa.sleep();
   //digitalWrite(ledPin, LOW);
-
 }
 
 
@@ -570,18 +577,19 @@ void loop() {
     **/
   if (sleepMode == 1) {
     Serial.printf("Go into deep sleep mode for %i seconds\n", DEEP_SLEEP);
-    //display.dim(true);
     do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup(DEEP_SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
   } 
   else if (sleepMode == 2) {
     Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
-    //display.dim(true);
     do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup(SLEEP * uS_TO_S_FACTOR);
     esp_deep_sleep_start(); 
   } 
+  else {
+    delay(2 * mS_TO_S_FACTOR); 
+  }
 
 }
 

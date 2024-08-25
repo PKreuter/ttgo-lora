@@ -10,7 +10,7 @@ byte localAddress = 0xA2;          // address of LoRa device
 //const char* NAME = "Briefkasten"; 
 //byte localAddress = 0xA1;          // address of LoRa device
 
-const int SLEEP = 10;         // seconds to Sleep
+const int SLEEP = 60;         // seconds to Sleep
 const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900
 
 

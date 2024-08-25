@@ -8,6 +8,10 @@
   - sensorState = HIGH|LOW
   - sensorValue = 0 - xxxx
 
+  Model Joy-IT® Ultraschall Abstandssensor
+    Artikel Nr. SEN-US01
+    Betriebsspannung 5V
+    Betriebsstrom 15mA
 
 **/
 
@@ -57,19 +61,19 @@ void getSensorUSValue() {
   // Überprüfung ob gemessener Wert innerhalb der zulässingen Entfernung liegt
   if (Abstand >= maximumRange || Abstand <= minimumRange) {
     // Falls nicht wird eine Fehlermeldung ausgegeben.
-    Serial.println("Abstand ausserhalb des Messbereichs");
-    Serial.println("-----------------------------------");
+    Serial.println("US-Sensor, Abstand ausserhalb des Messbereichs");
+    //Serial.println("-----------------------------------");
   }
   else {
     // Der berechnete Abstand wird in der seriellen Ausgabe ausgegeben
-    Serial.print("Der Abstand betraegt: ");
+    Serial.print("US-Sensor, Der Abstand betraegt: ");
     Serial.print(Abstand);
     Serial.println(" cm");
-    Serial.println("-----------------------------------");  
+    //Serial.println("-----------------------------------");  
   }
 
   sensorValue = Abstand;
-  Serial.print("Analog IO, Sensor value: ");
+  Serial.print("US-Sensor, Analog IO - Sensor value: ");
   Serial.print(sensorValue);
   if ( sensorValue > 15 ) {
     sensorState = HIGH;

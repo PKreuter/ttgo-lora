@@ -1,6 +1,10 @@
 /**
 
-  Sensor
+  Sensor, Model Joy-IT® Ultraschall Abstandssensor
+    Artikel Nr. SEN-US01
+    Betriebsspannung 5V
+    Betriebsstrom 15mA
+  
   - wenn frei / unbelegt   = ON
   - wenn besetzt / belegt  = OFF
 
@@ -8,22 +12,14 @@
   - sensorState = HIGH|LOW
   - sensorValue = 0 - xxxx
 
-  Model Joy-IT® Ultraschall Abstandssensor
-    Artikel Nr. SEN-US01
-    Betriebsspannung 5V
-    Betriebsstrom 15mA
-
 **/
 
 
-// generic
+// Generic
 bool sensorState = LOW;
 int sensorValue = 4095;
 
-// Case Proess-Button
-//const int sensorPin = 4;
-
-// Case Ultaschall-Sensor
+// Ultaschall-Sensor
 const int Trigger_AusgangsPin = 0;
 const int Echo_EingangsPin = 4;
 
@@ -33,20 +29,14 @@ int minimumRange = 2;
 long Abstand;
 long Dauer;
 
-/** return HIGH or LOW
-    HIGH = IR OK
-    LOW  = IR nok, or broken
-**/
-
 
 void initSensorUS() {
   pinMode(Trigger_AusgangsPin, OUTPUT);
   pinMode(Echo_EingangsPin, INPUT);
-
 }
 
-void getSensorUSValue() {
 
+void getSensorUSValue() {
   // Abstandsmessung wird mittels des 10us langen Triggersignals gestartet
   digitalWrite(Trigger_AusgangsPin, HIGH);
   delayMicroseconds(10);
@@ -75,7 +65,7 @@ void getSensorUSValue() {
   sensorValue = Abstand;
   Serial.print("US-Sensor, Analog IO - Sensor value: ");
   Serial.print(sensorValue);
-  if ( sensorValue > 15 ) {
+  if ( sensorValue > 5 ) {
     sensorState = HIGH;
     Serial.print(" - Sensor state: ");
   } 
@@ -91,7 +81,8 @@ void getSensorUSValue() {
 
 
 
-/**
+// Case Press-Button
+const int sensorPin = 15;    // 10K PULLDOWN
 
 // digital IO of a button "on=nicht belegt, off=belegt"
 void getButtonState() {
@@ -109,4 +100,3 @@ void getButtonState() {
   Serial.println(sensorState);
 }
 
-**/

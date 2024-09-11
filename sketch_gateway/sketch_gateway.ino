@@ -33,6 +33,9 @@ const char* SECRET_MQTT_PASSWORD = "password";
 
 #include <Ticker.h>
 
+//https://github.com/adafruit/Adafruit_SleepyDog/tree/master
+#include <Adafruit_SleepyDog.h>
+
 // Import Wi-Fi library
 #include <WiFi.h>
 #include "ESPAsyncWebServer.h"
@@ -152,6 +155,7 @@ void initOLED(){
   display.setCursor(0,20);
   display.print("OLED Display OK!");
   display.display();
+  Watchdog.reset();
  }
 
 
@@ -187,7 +191,9 @@ void initLoRA() {
   display.print("LoRa receiver: OK");
   display.display();
   delay(2000);
+  Watchdog.reset();
 }
+
 
 
 //-----------------Read LoRa packet and get the sensor readings-----------------------//
@@ -289,12 +295,14 @@ void connectToWifi() {
   display.setCursor(20,10);
   display.print(WiFi.localIP());
   display.display();
+  Watchdog.reset();
 }
 
 
 void connectToMqtt() {
   Serial.printf("Connecting to MQTT '%s:%i' ...\n", MQTT_BROKER, MQTT_PORT);
   mqttClient.connect();
+
 }
 
 
@@ -324,7 +332,6 @@ void WiFiEvent(WiFiEvent_t event) {
 }
 
 
-
 void onMqttConnect(bool sessionPresent) {
   Serial.print("Connected to MQTT, Session present: ");
   Serial.println(sessionPresent);
@@ -348,6 +355,13 @@ void onMqttPublish(uint16_t packetId) {
 void setup() {
   Serial.begin(115200);
   Serial.println("***LoRa Receiver " +String(VERSION));
+
+  //Watchdog.disable();
+  int countdownMS = Watchdog.enable(60 * 1000);
+  Serial.print("Watchdog enabled with max countdown of ");
+  Serial.print(countdownMS, DEC);
+  Serial.println(" milliseconds!");
+
 
   initOLED();
   showVersion();
@@ -373,69 +387,65 @@ void setup() {
   
   connectToMqtt();
 
+  Watchdog.disable();
+  Serial.println("Watchdog disabled");
+
+
+
   uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_GW_ONLINE, 1, true, "true");
   Serial.printf("Publishing on topic %s at QoS 1, packetId %i: ", MQTT_PUB_GW_ONLINE, packetIdPub3);
 
-
-
+  // Webserver
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(200, "text/plain", "Hello, world");
     });
 
+  server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"up\"}");
+  });
 
-server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
-  request->send(200, "application/json", "{\"status\":\"up\"}");
-});
+  server.on("/tech", HTTP_GET, [](AsyncWebServerRequest *request) {
+    StaticJsonDocument<500> data;
+    timeClient.update();
+    long ts = timeClient.getEpochTime(); 
+    data["ts"] = ts;
+    data["Wifi RSSI"] = rssiWiFi;
+    data["LoRa Packets received"] = loraPacketRecv;
+    data["MQTT Server"] = MQTT_BROKER;
+    data["MQTT Status"] = "online";
+    data["MQTT Packets published"] = publishMsgCount;
 
+    String response;
+    serializeJson(data, response);
+    request->send(200, "application/json", response);
+  });
 
-server.on("/tech", HTTP_GET, [](AsyncWebServerRequest *request) {
-  StaticJsonDocument<500> data;
-  timeClient.update();
-  long ts = timeClient.getEpochTime(); 
-  data["ts"] = ts;
-  data["Wifi RSSI"] = rssiWiFi;
-  data["LoRa Packets received"] = loraPacketRecv;
-  data["MQTT Server"] = MQTT_BROKER;
-  data["MQTT Status"] = "online";
-  data["MQTT Packets published"] = publishMsgCount;
+  server.on("/get-message", HTTP_GET, [](AsyncWebServerRequest *request) {
+    StaticJsonDocument<100> data;
+    if (request->hasParam("message")) {
+      data["message"] = request->getParam("message")->value();
+    }
+    else {
+      data["message"] = "No message parameter";
+    }
+    String response;
+    serializeJson(data, response);
+    request->send(200, "application/json", response);
+  });
 
-  String response;
-  serializeJson(data, response);
-  request->send(200, "application/json", response);
-});
-
-
-server.on("/get-message", HTTP_GET, [](AsyncWebServerRequest *request) {
-  StaticJsonDocument<100> data;
-  if (request->hasParam("message"))
-  {
-    data["message"] = request->getParam("message")->value();
-  }
-  else {
-    data["message"] = "No message parameter";
-  }
-  String response;
-  serializeJson(data, response);
-  request->send(200, "application/json", response);
-});
-
-
-    // Send a POST request to <IP>/post with a form field message set to <message>
-    server.on("/post", HTTP_POST, [](AsyncWebServerRequest *request){
-        String message;
-        if (request->hasParam(PARAM_MESSAGE, true)) {
-            message = request->getParam(PARAM_MESSAGE, true)->value();
-        } else {
-            message = "No message sent";
-        }
+  // Send a POST request to <IP>/post with a form field message set to <message>
+  server.on("/post", HTTP_POST, [](AsyncWebServerRequest *request){
+    String message;
+    if (request->hasParam(PARAM_MESSAGE, true)) {
+      message = request->getParam(PARAM_MESSAGE, true)->value();
+    } else {
+       message = "No message sent";
+    }
         request->send(200, "text/plain", "Hello, POST: " + message);
-    });
+  });
 
-    server.onNotFound(notFound);
-
-    server.begin();
-
-
+  server.onNotFound(notFound);
+  server.begin();
 
 }
 

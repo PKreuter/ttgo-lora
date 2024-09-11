@@ -30,26 +30,18 @@ RULES
 - Using RTC Memory to Store Data During Sleep
 - Place RTC_DATA_ATTR in front of any variable that you want to store in RTC memory. 
 
-External Componets
+External Components
 - JOY-IT SEN-US01
-- DHT22
 - JOY_IT BMP280
+- DHT22
 
-
-Pull Widerstand 10K nach 5V for sleepModePin
-
-  //Increments boot number and prints it every reboot
-  bootCount++;
-  Serial.println("Boot number: " + String(bootCount));
 
 PINs, welche wahrscheinlich reserviert sind
-  0   Boot  Sensor US Trigger
-  12  ??
-PIN's for IO
-  2   Deep Sleep Sensor, LOW=Depp Sleep, HIGH=Sleep disabled,  LOW=Chip in download mode.
+  0   Boot / Sensor US Trigger
+  2   LOW=Chip in download mode.
   4   Sensor US Echo
   5   LoRa SCK
-  12  
+  12  ??
   13  
   14  LED Pin / MOS-FET to enabled Power for Sensors
   18  LoRa CS / SS
@@ -58,77 +50,57 @@ PIN's for IO
   25  DHT Sensor
   26  LoRa DIO0
   27  LoRa MOSI
-  34  Wakeup
-  35  interval VBAT
-  36  Sleep PIN
+  34  Wakeup digital
+  35  interval VBAT analog
+  36  Sleep PIN analog
 
   LED
-  red     VBUS
-  blue    Battery
-  green   IO25 
-
+  - red     VBUS
+  - blue    Battery
+  - green   IO25 
 
   Interfaces
   - LoRa SPI
   - TF Card SPI
   - OLED IC2
 
-
-
-Zum Download via USB muss PIN open sein
-
 */ 
 
+//#include "config-node-a1.h"
+#include "config-node-a2.h"
+
 #include "config.h" 
-
 #include "sensor.h"
+#include "init.h"
 
-//Libraries for LoRa
-#include <Wire.h>
-#include <SPI.h>
-#include <LoRa.h>
 
-//Libraries for BMP280
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BMP280.h>
+
+//https://github.com/adafruit/Adafruit_SleepyDog/tree/master
+#include <Adafruit_SleepyDog.h>
+
+
 
 //Libraries for OLED Display
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-//Libraries for DHT22/11
-#include <DHT.h>
-#include <DHT_U.h>
 
 //Libraries to create Json Documents
 #include <ArduinoJson.h>
 
 
-//Digital pin connected to the DHT sensor
-#define DHTPIN 25
-#define DHTTYPE DHT22 
-
-/**
-BMP280 Pin Description Communication via IC2
-VCC: Connected to the positive supply of 3.3V
-GND: Common Ground pin.
-SCL: Serial Clock pin 
-SDA: Serial Data pin 
-ID of 0x56-0x58 represents a BMP 280,
-**/
-Adafruit_BMP280 bmp;     // Communication via I2C
-#define BMP280 0x77
-#define SEALEVELPRESSURE_HPA (1013.25)
-
 // Define Sleep Mode 
-// < 200 enabled, =4095 disbaled 
+// < 200 mode 1=enabled, =4095 disbaled 
 const int sleepModePin = 36;   //2
+
+// PIN 15 ev nur digital
+
 // variable for store the sleepmode
-int sleepMode = 0;   // 0=no sleep, 1=deep, 2=short
-int wait_for = 20;  // every 20 seconds
+int sleepMode = 1;   // 0=no sleep, 1=deep, 2=short
+int wait_for = 15;   // every n seconds
 
 // digital IO as Output
-const int ledPin =  14;  // Power Sensor
+const int pwrPin =  14;  // Power Sensor
 
 //const char* wakeUpPin = GPIO_NUM_34;
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
@@ -136,8 +108,6 @@ const int ledPin =  14;  // Power Sensor
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
 
-////define OLED instance
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziierung
 
 // OLED line 0..6, writePixel (x, y, color)
 int disPos_y0 = 0;
@@ -168,17 +138,15 @@ RTC_DATA_ATTR unsigned int msgCounter = 0;
 RTC_DATA_ATTR int bootCount = 0; 
 
 
-byte destination = 0xAA;      // destination to send to
+
 long lastSendTime = 0;        // last send time
 int interval = 50;            // interval between sends
 
-//define DHT instance
-DHT_Unified dht(DHTPIN, DHTTYPE);
+
 uint32_t delayMS;
 
 JsonDocument doc;
 char jsonSerial[500];
-
 
 
 void setup() {
@@ -190,21 +158,26 @@ void setup() {
   // Battery Pin as an analog input 
   pinMode(vbatPin, INPUT);
  
-  // initialize the pushbutton pin as a digital input, display on/off
-  pinMode(sleepModePin, INPUT);
+  // initialize Sleep Pin as an analog input
+  pinMode(sleepModePin, INPUT_PULLDOWN);
 
-  // initialize the IR pin as an input, die-post
-  //pinMode(sensorPin, INPUT);
+  // initialize the sensor 
+  if ( enableButton == true ) {
+    pinMode(sensorPin, INPUT);
+  }
+  else {
+    initSensorUS();
+  }
 
-  initSensorUS();
-
-  // initialize the LED pin as an output
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, HIGH);
+  // initialize the power pin as an output
+  pinMode(pwrPin, OUTPUT);
+  digitalWrite(pwrPin, HIGH); // set power on
  
   // initialize Sensors/OLED/LoRa
   initDHT();
-  initBMP();
+  if ( enableBMP == true ) {
+    initBMP();
+  }
   initOLED();
   showVersion();
   initLoRa();
@@ -215,18 +188,27 @@ void setup() {
 
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
-
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1); //1 = High, 0 = Low
 
   // get and print sleep mode to OLED
-  getSleepModeState();
+  //getSleepModeState();
+  //print_sleep_info();
+  
+  // sleep to hold messages on display
+  delay(1 * mS_TO_S_FACTOR);
+
+}
+
+
+
+void print_sleep_info() {
   if (sleepMode == 1) {
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setCursor(0,45);
     display.print("SLEEP Mode 1 DEEP");
     display.setCursor(0,55);
-    display.print("update every ");
+    display.print("Update every ");
     display.print(DEEP_SLEEP);
     display.print("s");    
     display.display();
@@ -237,7 +219,7 @@ void setup() {
     display.setCursor(0,45);
     display.print("SLEEP Mode 2");
     display.setCursor(0,55);
-    display.print("update every ");
+    display.print("Update every ");
     display.print(SLEEP);
     display.print("s");    
     display.display();
@@ -248,104 +230,14 @@ void setup() {
     display.setCursor(0,45);
     display.print("SLEEP Mode 0");
     display.setCursor(0,55);
-    display.print("update every ");
+    display.print("Update every ");
     display.print(wait_for);
     display.print("s");
     display.display();
   }
 
-  // sleep to hold messages on display
-  delay(2 * mS_TO_S_FACTOR);
-
 }
 
-
-void showVersion(){
-  display.setCursor(0,0);
-  display.print("Version: ");
-  display.println(VERSION);
-  display.setCursor(0,10);
-  display.print("LoRa Node: 0x");
-  display.println(localAddress, HEX);
-  display.display();
-}
-
-
-//Initialize OLED Module
-void initOLED() {
-  Serial.println("Initializing OLED Display");
-  
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3C for 128x32
-    Serial.println(F("*SSD1306 allocation failed"));
-    for (;;)
-      ; // Don't proceed, loop forever
-  }
-
-  Serial.println(" OLED Display OK!");
-
-  display.clearDisplay();
-  display.display(); // zeigt den Grafikpuffer auf dem OLED-Display
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setCursor(0,20);
-  display.print("OLED Display OK!");
-  display.display();
-
-}
-
-
-//Initialize LoRa Module
-void initLoRa() {
-  Serial.println("Initializing LoRa Node");
-  //SPI LoRa pins
-  SPI.begin(SCK, MISO, MOSI, SS);
-  //setup LoRa transceiver module
-  LoRa.setPins(SS, RST, DIO0);
-
-  /*
-  Der Spreading Factor (SF) beschreibt dabei wieviele Chirps, also Daten Carrier pro Sekunde übertragen werden. 
-  Dadurch ist die Bitrate, pro Symbol abgestrahlte Energie und die Reichweite definiert. 
-  Dabei wurde bei LoRa die „Adaptive Data Rate“ eingeführt: 
-  je nach Netzwerk Konfiguration wird über den Sender der Spreading Faktor zwischen SF7 und SF12 eingestellt.
-  SF7 = range 2km, time on air 61ms, 5470bps
-  **/
-  LoRa.setSpreadingFactor(7);
-  
-  if (!LoRa.begin(BAND)) {
-    Serial.println("Starting LoRa failed!");
-    while (1);
-  }
-
-  //LoRa.dumpRegisters(Serial);
-
-  LoRa.enableCrc();
-
-  Serial.println(" LoRa Initializing OK!");
-  display.setCursor(0,30);
-  display.print("LoRa Initializing OK!");
-  display.display();
-}
-
-//Initialize BMP280 Sensor
-void initBMP() {
-  Serial.println(F("Initializing BMP280 Sensor"));
-  if (!bmp.begin()) {  
-    Serial.println(" Could not find a valid BMP280 !");
-    while (1);
-  }
-  else {
-    Serial.println(F(" BMP280 is OK!"));
-  }
-}
-
-//Initialize DHT Sensor
-void initDHT() {
-  // Initialize DHT device.
-  Serial.println(F("Initializing DHT Sensor"));
-  dht.begin();
-  Serial.println(F(" DHT Sensor is OK!"));
-}
 
 //function for fetching DHT readings
 void getDHTreadings() {
@@ -353,7 +245,6 @@ void getDHTreadings() {
   delay(delayMS);
   // Get temperature event and print its value.
   sensors_event_t event;
-  /**
   dht.temperature().getEvent(&event);
   if (isnan(event.temperature)) {
     Serial.println(F("*Error reading temperature!"));
@@ -364,7 +255,6 @@ void getDHTreadings() {
     Serial.print(Temperature);
     Serial.println(F("°C"));
   }
-  **/
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
   if (isnan(event.relative_humidity)) {
@@ -381,25 +271,23 @@ void getDHTreadings() {
 
 //function for fetching BMP280 readings
 void getBMPreadings() {
-  Pressure = bmp.readPressure()/133;
+  Pressure = bmp.readPressure()/100;
+  //float SLP = bmp.seaLevelForAltitude(SEALEVELPRESSURE_HPA, Pressure);
+  //float LLP = bmp.readAltitude(SLP);  //SEALEVELPRESSURE_HPA
+  //Pressure = LLP;
   Serial.print(F("Pressure: "));
   Serial.print(Pressure);
-  Serial.println(F(" mmHg"));
-
+  Serial.println(F(" hPa"));
   Temperature = bmp.readTemperature();
   Serial.print(F("Temperature = "));
   Serial.print(bmp.readTemperature());
   Serial.println(" *C");
 
-  Serial.print(F("Approx altitude = "));
-  Serial.print(bmp.readAltitude(1026.53)); // dies sollte an Ihren lokalen Druck angepasst werden
-  Serial.println(" m");
-
 }
 
 
 void getSleepModeState() {
-  // LOW = Sleep Mode enabled
+
   int sleepModeValue = 0;
   sleepModeValue = analogRead(sleepModePin);
   
@@ -407,9 +295,8 @@ void getSleepModeState() {
   Serial.print(sleepModePin);
   Serial.print(" - Value: ");
   Serial.print(sleepModeValue);
-
   Serial.print(" - Sleep: ");
-  if (sleepModeValue < 200) {
+  if (sleepModeValue < 500) {
     sleepMode = 1;
     Serial.print("enabled");
   } 
@@ -426,16 +313,12 @@ void getSleepModeState() {
 
 
 /*
-Method to print the reason by which ESP32
-has been awaken from sleep
+Method to print the reason by which ESP32 has been awaken from sleep
 */
 void print_wakeup_reason(){
   esp_sleep_wakeup_cause_t wakeup_reason;
-
   wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch(wakeup_reason)
-  {
+  switch(wakeup_reason) {
     case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
     case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
     case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
@@ -509,8 +392,24 @@ void getVbat() {
 }
 
 
+void LoRa_txMode(){
+  LoRa.idle();                          // set standby mode
+  LoRa.disableInvertIQ();               // normal mode
+}
+
+
+
 //Send data to receiver node using LoRa
 void sendReadings() {
+
+  /**
+  //Watchdog.disable();
+  int countdownMS = Watchdog.enable(20 * 1000);
+  Serial.print("Enabled the watchdog with max countdown of ");
+  Serial.print(countdownMS, DEC);
+  Serial.println(" milliseconds!");
+  **/
+
   msgCounter++;
 
   // localAddress as 0xAA
@@ -542,10 +441,21 @@ void sendReadings() {
     doc1["diepostistda"] = "false";
   }
 
+  // enable wenn botten
+  if ( enableButton == true ) {
+    if (sensorState == HIGH) {
+      doc1["sensor_state"] = "low";
+      doc1["diepostistda"] = "true";
+    } else {
+      doc1["sensor_state"] = "high";
+      doc1["diepostistda"] = "false";
+    }
+  }
+
   doc1["vbattery"] = VBAT;
-
+  doc1["wakeup_reason"] = esp_sleep_get_wakeup_cause();
+  
   serializeJson(doc, jsonSerial);
-
   
   //Send LoRa packet to receiver
   Serial.println("LoRa, begin to send packet to Gateway");
@@ -555,13 +465,14 @@ void sendReadings() {
   LoRa.write(byte(msgCounter));         // add message ID
   LoRa.write(LoRaMessage.length());     // add payload length
   LoRa.print(jsonSerial);
-  
   LoRa.endPacket();
   //LoRa.endPacket(true); // true = async / non-blocking mode
   
   Serial.printf("LoRa, send packet done: %d\n", msgCounter);
   Serial.println(jsonSerial);
 
+  // 
+  //Watchdog.reset();
   displayReadings();
 
 }
@@ -571,28 +482,29 @@ void sendReadings() {
 void do_ready_for_sleep() {
   display.dim(true);
   display.clearDisplay();
-  //LoRa.end();
-  //LoRa.sleep();
-  //digitalWrite(ledPin, LOW);
-
-
-    LoRa.sleep();
-    LoRa.idle(); 
-    LoRa.end();                    // set standby mode
-    digitalWrite(ledPin, LOW);    // disable Power US   
-
+  LoRa.sleep();
+  LoRa.idle(); 
+  LoRa.end();                    // set standby mode
+  digitalWrite(pwrPin, LOW);    // disable Power US   
 }
 
 
 //function for fetching All readings at once
 void getReadings() {
   getDHTreadings();
-  getBMPreadings();
-  
+  if ( enableBMP == true ) {
+    getBMPreadings();
+  }
   /** Sensor enable one of them **/
-  //getButtonState();     // as digital IO based on Press-Button
-  getSensorUSValue();     // as analog IO
+  if ( enableButton == true ) {
+    getButtonState();     // as digital IO based on Press-Button
+  }
+  else {
+    getSensorUSValue();   // as analog IO
+  }
 }
+
+
 
 void loop() {
 
@@ -603,7 +515,6 @@ void loop() {
 
   // sleep to hold messages on display
   delay(2 * mS_TO_S_FACTOR); 
-  
   // check sleep mode state
   getSleepModeState();
 
@@ -617,22 +528,28 @@ void loop() {
     **/
   if (sleepMode == 1) {
     Serial.printf("Go into deep sleep mode for %i seconds\n", DEEP_SLEEP);
+    display.clearDisplay();
+    print_sleep_info();
+    delay(1 * mS_TO_S_FACTOR); 
     do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup((DEEP_SLEEP -4) * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
   } 
   else if (sleepMode == 2) {
     Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
+    display.clearDisplay();
+    print_sleep_info();;
     do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup((SLEEP -4) * uS_TO_S_FACTOR);
     esp_deep_sleep_start(); 
   } 
   else {
+    delay((5) * mS_TO_S_FACTOR);  // show display for +5 secondsdelay
+    display.clearDisplay();
+    print_sleep_info();;
     // not sleep but wait some seconds
-    delay((wait_for -4) * mS_TO_S_FACTOR);  // deley
+    delay((wait_for -9) * mS_TO_S_FACTOR);  // delay
   }
-  
-
 
 }
 

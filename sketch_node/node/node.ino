@@ -44,15 +44,17 @@ PINs, welche wahrscheinlich reserviert sind
   12  ??
   13  
   14  LED Pin / MOS-FET to enabled Power for Sensors
+  15  DHT Sensor   // PIN 15 ev nur digital
   18  LoRa CS / SS
   19  LoRa MISO
   23  LoRa RST
-  25  DHT Sensor
+  25  
   26  LoRa DIO0
   27  LoRa MOSI
   34  Wakeup digital
   35  interval VBAT analog
-  36  Sleep PIN analog
+  36  Sleep PIN digital
+  39  Sleep PIN digital
 
   LED
   - red     VBUS
@@ -73,34 +75,30 @@ PINs, welche wahrscheinlich reserviert sind
 #include "sensor.h"
 #include "init.h"
 
-
-
 //https://github.com/adafruit/Adafruit_SleepyDog/tree/master
 #include <Adafruit_SleepyDog.h>
-
-
 
 //Libraries for OLED Display
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-
 //Libraries to create Json Documents
 #include <ArduinoJson.h>
 
-
-// Define Sleep Mode 
-// < 200 mode 1=enabled, =4095 disbaled 
-const int sleepModePin = 36;   //2
-
-// PIN 15 ev nur digital
-
+/** Define Sleep Mode 
+ both HIGH = Mode 1 Deep
+ others = Mode 2 'sleep'
+ both LOW = Disabled as 'wait_for'
+**/
+const int sleepModePin1 = 36;   //2
+const int sleepModePin2 = 39;   //2
 // variable for store the sleepmode
 int sleepMode = 1;   // 0=no sleep, 1=deep, 2=short
 int wait_for = 15;   // every n seconds
 
 // digital IO as Output
 const int pwrPin =  14;  // Power Sensor
+//const int pwrPin =  25;  // Power Sensor
 
 //const char* wakeUpPin = GPIO_NUM_34;
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
@@ -159,7 +157,8 @@ void setup() {
   pinMode(vbatPin, INPUT);
  
   // initialize Sleep Pin as an analog input
-  pinMode(sleepModePin, INPUT_PULLDOWN);
+  pinMode(sleepModePin1, INPUT);
+  pinMode(sleepModePin2, INPUT);
 
   // initialize the sensor 
   if ( enableButton == true ) {
@@ -288,7 +287,9 @@ void getBMPreadings() {
 
 void getSleepModeState() {
 
-  int sleepModeValue = 0;
+  int sleepModeValue1 = 0;
+  int sleepModeValue2 = 0;
+  /**
   sleepModeValue = analogRead(sleepModePin);
   
   Serial.print("Sleep PIN: ");
@@ -296,7 +297,7 @@ void getSleepModeState() {
   Serial.print(" - Value: ");
   Serial.print(sleepModeValue);
   Serial.print(" - Sleep: ");
-  if (sleepModeValue < 500) {
+  if (sleepModeValue < 300) {
     sleepMode = 1;
     Serial.print("enabled");
   } 
@@ -309,6 +310,33 @@ void getSleepModeState() {
     Serial.print("enabled");
   }
   Serial.printf(" - Mode: %i\n", sleepMode);
+  **/
+  sleepModeValue1 = digitalRead(sleepModePin1);
+  sleepModeValue2 = digitalRead(sleepModePin2);
+  Serial.print("Sleep PIN: ");
+  Serial.print(sleepModePin1);
+  Serial.print(" - Value: ");
+  Serial.print(sleepModeValue1);
+  Serial.print(" :: Sleep PIN: ");
+  Serial.print(sleepModePin2);
+  Serial.print(" - Value: ");
+  Serial.print(sleepModeValue2);
+  Serial.print(" ==> Sleep: ");
+
+  if (sleepModeValue1 == HIGH and sleepModeValue2 == HIGH ) {
+    sleepMode = 1;
+    Serial.print("enabled");
+  } 
+  else if (sleepModeValue1 == LOW and sleepModeValue2 == LOW) {
+    sleepMode = 0;
+    Serial.print("disabled");
+  } 
+  else { 
+    sleepMode = 2;
+    Serial.print("enabled");
+  }
+  Serial.printf(" - Mode: %i\n", sleepMode); 
+
 }
 
 
@@ -539,6 +567,7 @@ void loop() {
     Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
     display.clearDisplay();
     print_sleep_info();;
+    delay(1 * mS_TO_S_FACTOR); 
     do_ready_for_sleep();
     esp_sleep_enable_timer_wakeup((SLEEP -4) * uS_TO_S_FACTOR);
     esp_deep_sleep_start(); 

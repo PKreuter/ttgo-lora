@@ -75,7 +75,7 @@ void initLoRa() {
 #include <DHT.h>
 #include <DHT_U.h>
 //Digital pin connected to the DHT sensor
-#define DHTPIN 25
+#define DHTPIN 15
 #define DHTTYPE DHT22 
 //define DHT instance
 DHT_Unified dht(DHTPIN, DHTTYPE);

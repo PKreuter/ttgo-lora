@@ -1,50 +1,45 @@
 
 /**
 
- This is LoRa Receiver / Gateway Code - (WebServer)
+This is LoRa Receiver / Gateway Node
 
-OLED SSD1306 I2C Address 0x3C
+Feaures
+- OLED SSD1306 I2C Address 0x3C
+- WebServer
+- Time base is UTC
+- Receive LoRa Message and forward to MQTT Server
 
-10  - Running
-20
-30
-40   LoRa received
-50   MQTT message send
-
-
-Sensitive config needs to stored in file 'secrets.h'
-
-// Network credentials
-const char* SECRET_WIFI_SSID = "ssidname";      
-const char* SECRET_WIFI_PASSWORD = "password"; 
-
-// MQTT credentials
-const char* SECRET_MQTT_USERNAME = "username";
-const char* SECRET_MQTT_PASSWORD = "password";
-
-*/
+      MQTT Message
+        2024-07-13T07:33:36+0000  : lora/nodea1/data : 
+         {"ts":1720856015,"data":[
+          {"name":"Test-Node","node":"0xA1","type":"lora","message":349,
+           "temperature":15.30000019,"humidity":90,
+           "pressure":null,"buttonState":0,"vbattery":4.283311367}]}
 
 
-//Sensitive configs
-#include "secrets.h"   // do store secrets, needs to edit before using
+**/
+
+
+// Sensitive configs
+#include "secrets.h"   
 
 #include "config.h"
 #include "mqtt.h"
 
 #include <Ticker.h>
 
-//https://github.com/adafruit/Adafruit_SleepyDog/tree/master
+// https://github.com/adafruit/Adafruit_SleepyDog/tree/master
 #include <Adafruit_SleepyDog.h>
 
 // Import Wi-Fi library
 #include <WiFi.h>
 #include "ESPAsyncWebServer.h"
 
-//Libraries for LoRa
+// Libraries for LoRa
 #include <SPI.h>
 #include <LoRa.h>
 
-//Libraries for OLED Display
+// Libraries for OLED Display
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -55,6 +50,13 @@ const char* SECRET_MQTT_PASSWORD = "password";
 
 // MQTT - https://registry.platformio.org/libraries/heman/AsyncMqttClient-esphome
 #include <AsyncMqttClient.h>
+#if ASYNC_TCP_SSL_ENABLED
+#define MQTT_SECURE true
+#define MQTT_SERVER_FINGERPRINT {0x7e, 0x36, 0x22, 0x01, 0xf9, 0x7e, 0x99, 0x2f, 0xc5, 0xdb, 0x3d, 0xbe, 0xac, 0x48, 0x67, 0x5b, 0x5d, 0x47, 0x94, 0xd2}
+#define MQTT_PORT 8883
+#else
+#define MQTT_PORT 1883
+#endif
 
 #include <ArduinoJson.h>
 char jsonSerial[500];  // length of JSON
@@ -75,33 +77,26 @@ NTPClient timeClient(ntpUDP);
 // heartbeat
 unsigned long previousMillis = 0;    // Stores last time temperature was published
 
-
-unsigned long loraPacketRecv = 0;   // counter number of messages
-byte localAddress = 0xAA;           // address of this device
-
 // Variables to save date and time
-String formattedDate;
-String timestamp;
 String epochtime;
 
 // Initialize variables to get and save LoRa data
+unsigned long loraPacketRecv = 0;   // counter number of messages
 String loraRecvFrom;
 String DATA;
-
-// LoRa
 String loraRssi;
 String loraSnr;
 
-// Wifi data
+// Initialize variables to get and save Wifi data
 String rssiWiFi;
 
-// store number of MQTT messages
+//Sstore number of MQTT messages
 String publishMsgCount = "0";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-// define OLED instance
+// Define OLED instance
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziierung
 
 // OLED line 1..6, writePixel (x, y, color)
@@ -138,7 +133,7 @@ void showVersion(){
 }
 
 
-//------------------Initialize OLED Module-------------------------------------------//
+// Initialize OLED Module
 void initOLED(){
   Serial.println("Initializing OLED Display");
   //reset OLED display via software
@@ -159,7 +154,7 @@ void initOLED(){
  }
 
 
-//----------------------Initialize LoRa Module-----------------------------------------//
+// Initialize LoRa Module
 void initLoRA() {
   int counter;
   //SPI LoRa pins
@@ -196,7 +191,7 @@ void initLoRA() {
 
 
 
-//-----------------Read LoRa packet and get the sensor readings-----------------------//
+// Read LoRa packet and get JSON
 void getLoRaData() {
   Serial.println("Lora packet received: ");
   loraPacketRecv++;
@@ -215,20 +210,18 @@ void getLoRaData() {
   Serial.println("Sent to: 0x" + String(recipient, HEX));
   Serial.println("Message ID: " + String(incomingMsgId));
   Serial.println("Message length: " + String(incomingLength));
-  //Serial.println("Message: " + incoming);
   Serial.println("RSSI: " + String(LoRa.packetRssi()));
   Serial.println("Snr: " + String(LoRa.packetSnr()));
   Serial.println();
 
-
-  // Get 
+  // Get RSSI / SNR
   loraRssi = LoRa.packetRssi();
   loraSnr = LoRa.packetSnr();
 
- // if the recipient isn't this device or broadcast,
- if (recipient != localAddress && recipient != 0xFF) {
-  Serial.println("This message is not for me.");
-   ;
+  // if the recipient isn't this device or broadcast,
+  if (recipient != localAddress && recipient != 0xFF) {
+    Serial.println("This message is not for me.");
+    ;
     return;               // skip rest of function
   }
 
@@ -257,33 +250,26 @@ void getLoRaData() {
       deserializeJson(doc, DATA);
       json_val = doc["data"];
     } 
-
-
-
   }
 
   display.setCursor(0,disPos_y6);
   // reset line
   display.setTextColor(BLACK, BLACK);
   display.println("                             "); 
-  //  display.setTextColor(WHITE);  
+  // display.setTextColor(WHITE);  
   display.setTextColor(WHITE, BLACK);
   display.setCursor(0,disPos_y6);
   display.printf("LoRa RSSI: %s", String(loraRssi));
   display.display();
-
 }
 
 void connectToWifi() {
-  //Serial.printf("Connecting to WiFi '%s' ...\n", WIFI_SSID);
   Serial.printf("Connecting to WiFi '%s' .", SECRET_WIFI_SSID);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  //Serial.printf("\nWiFi connected, IP address: %s\n", WiFi.localIP().toString());
-  Serial.printf("Connected, IP address: %s\n", WiFi.localIP().toString());
   
   display.setCursor(0,10);
   // reset line
@@ -300,9 +286,8 @@ void connectToWifi() {
 
 
 void connectToMqtt() {
-  Serial.printf("Connecting to MQTT '%s:%i' ...\n", MQTT_BROKER, MQTT_PORT);
+  Serial.printf("\nConnecting to MQTT '%s:%i'...\n", MQTT_BROKER, MQTT_PORT);
   mqttClient.connect();
-
 }
 
 
@@ -313,8 +298,8 @@ void WiFiEvent(WiFiEvent_t event) {
     //    Serial.println("WiFi Started");
     //    break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      Serial.printf("\nWiFi connected, IP address: %s\n", WiFi.localIP().toString());
-      Serial.printf("WiFi RSSI: %d\r\n", WiFi.RSSI());
+      Serial.printf("\nWiFi connected, IP address: %s", WiFi.localIP().toString());
+      Serial.printf(", WiFi RSSI: %d\r\n", WiFi.RSSI());
       rssiWiFi = WiFi.RSSI();
       //connectToMqtt();
       break;
@@ -349,19 +334,18 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 void onMqttPublish(uint16_t packetId) {
   Serial.printf(" Received acknowledged for packetId %s\n", String(packetId));
   publishMsgCount = String(packetId);
-
 }
+
 
 void setup() {
   Serial.begin(115200);
   Serial.println("***LoRa Receiver " +String(VERSION));
 
-  //Watchdog.disable();
+  // enable watchdog, used when WiFi not comes up
   int countdownMS = Watchdog.enable(60 * 1000);
-  Serial.print("Watchdog enabled with max countdown of ");
+  Serial.print("Enable Watchdog with max countdown of ");
   Serial.print(countdownMS, DEC);
   Serial.println(" milliseconds!");
-
 
   initOLED();
   showVersion();
@@ -371,34 +355,50 @@ void setup() {
 
   connectToWifi();
   
- // wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
- // wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
+  //wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
+  //wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
 
-  // Initialize a NTPClient to get time
+  // Initialize a NTPClient to get time, we use UTC
   timeClient.begin();
   // Set offset time in seconds to adjust for your timezone, for example:
   //timeClient.setTimeOffset(3600);
   
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
+  //mqttClient.onSubscribe(onMqttSubscribe);
+  //mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  //mqttClient.onMessage(onMqttMessage);
   mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCredentials(SECRET_MQTT_USERNAME, SECRET_MQTT_PASSWORD);
   
   connectToMqtt();
 
+  #if ASYNC_TCP_SSL_ENABLED
+    mqttClient.setSecure(MQTT_SECURE);
+    if (MQTT_SECURE) {
+      mqttClient.addServerFingerprint((const uint8_t[])MQTT_SERVER_FINGERPRINT);
+    }
+  #endif
+
+
+
   Watchdog.disable();
-  Serial.println("Watchdog disabled");
+  Serial.println("All seems Connected, disable Watchdog");
 
-
-
+  // send online message to MQTT
   uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_GW_ONLINE, 1, true, "true");
   Serial.printf("Publishing on topic %s at QoS 1, packetId %i: ", MQTT_PUB_GW_ONLINE, packetIdPub3);
 
   // Webserver
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/plain", "Hello, world");
-    });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "OK");
+  });
+
+  // Health Endpoint
+  server.on("/health", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "OK");
+  });
 
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "application/json", "{\"status\":\"up\"}");
@@ -420,6 +420,7 @@ void setup() {
     request->send(200, "application/json", response);
   });
 
+  // TEST, no function
   server.on("/get-message", HTTP_GET, [](AsyncWebServerRequest *request) {
     StaticJsonDocument<100> data;
     if (request->hasParam("message")) {
@@ -433,7 +434,7 @@ void setup() {
     request->send(200, "application/json", response);
   });
 
-  // Send a POST request to <IP>/post with a form field message set to <message>
+  // TEST, no function, send a POST request to <IP>/post with a form field message set to <message>
   server.on("/post", HTTP_POST, [](AsyncWebServerRequest *request){
     String message;
     if (request->hasParam(PARAM_MESSAGE, true)) {
@@ -446,7 +447,6 @@ void setup() {
 
   server.onNotFound(notFound);
   server.begin();
-
 }
 
 void update_display() {
@@ -475,7 +475,6 @@ void update_display() {
   display.setCursor(0, disPos_y3);
   display.printf("MQTT send: %s", publishMsgCount);
   display.display();
-
 }
 
 
@@ -485,55 +484,47 @@ void loop() {
   int packetSize = LoRa.parsePacket();
   if (packetSize) {
     getLoRaData();
-    //displayReadings();
-
-    timeClient.update();
-
-    Serial.println(timeClient.getFormattedTime());              
-    Serial.println(timeClient.getEpochTime());  
-
-    long ts = timeClient.getEpochTime();  
-
+    
+    // we had data
     if(DATA.indexOf("data") > 0) {
 
-      /** Publish MQTT messages
-        2024-07-13T07:33:36+0000  : lora/nodea1/data : 
-         {"ts":1720856015,"data":[
-          {"name":"Test-Node","node":"0xA1","type":"lora","message":349,
-           "temperature":15.30000019,"humidity":90,
-           "pressure":null,"buttonState":0,"vbattery":4.283311367}]}
-      */
-      JsonDocument doc;
-      char jsonSerial[500];
+      timeClient.update();
+      Serial.println(timeClient.getFormattedTime());              
+      Serial.println(timeClient.getEpochTime());  
+      long ts = timeClient.getEpochTime();  
+
+      //JsonDocument doc;
+      //char jsonSerial[500];
+
+      // add new field from gateway and encapsulte node-json
       doc["ts"] = ts;
       doc["lora_rssi"] = loraRssi;
       doc["lora_snr"] = loraSnr;
-
       doc["data"] = json_val;
       serializeJson(doc, jsonSerial);
+
       loraRecvFrom = "/" + loraRecvFrom;
       String topic = MQTT_PUB_PREFIX + loraRecvFrom + MQTT_PUB_DATA;
-      //String topic = MQTT_PUB_PREFIX + loraRecvFrom + MQTT_PUB_DATA;
       uint16_t packetIdPub0 = mqttClient.publish(String(topic).c_str(), 1, true, jsonSerial);
       Serial.printf("Publishing on topic %s at QoS 1, packetId: %i: Message %s\n", 
         topic.c_str(), packetIdPub0, jsonSerial);
     }
  
-
-
   }
 
-  unsigned long currentMillis = millis();
   // Every X number of seconds, it publishes a new MQTT liveness message
+  unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= intervalMillis) {
     // Save the last time a new reading was published
     previousMillis = currentMillis;
 
-    // send heartbeat
-    uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_GW_LIVENESS, 1, true, String("true").c_str());
-    Serial.printf("Publishing on topic %s at QoS 1, packetId: %i\n", MQTT_PUB_GW_LIVENESS, packetIdPub1);
-  
-    // send WiFi RSSI
+    // send liveness plain
+    {
+      uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_GW_LIVENESS, 1, true, String("true").c_str());
+      Serial.printf("Publishing on topic %s at QoS 1, packetId: %i\n", MQTT_PUB_GW_LIVENESS, packetIdPub1);
+    }
+
+    // send WiFi RSSI as JSON
     {
       timeClient.update();
       long ts = timeClient.getEpochTime(); 
@@ -548,9 +539,7 @@ void loop() {
     }
 
   }
-
   update_display();   
-
 }
 
 

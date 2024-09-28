@@ -1,9 +1,12 @@
 
-
+// Generic config
 
 //Version
-const char* VERSION = "0.014a";
+const char* VERSION = "0.014c";
 const char* NAME = "Gateway"; 
+
+// address of this device
+byte localAddress = 0xAA;           
 
 //const long intervalMillis = 10000;  // TEST, interval for liveness
 const long intervalMillis = 300000;  // interval for liveness
@@ -25,11 +28,7 @@ const long intervalMillis = 300000;  // interval for liveness
 #define SCREEN_HEIGHT 64
 
 // time factor
-#define mS_TO_S_FACTOR 1000
-#define uS_TO_S_FACTOR 1000000  // conversion factor for micro seconds to seconds 
-
-
-
-
+#define mS_TO_S_FACTOR 1000     // factor for milli seconds to seconds
+#define uS_TO_S_FACTOR 1000000  // factor for micro seconds to seconds 
 
 

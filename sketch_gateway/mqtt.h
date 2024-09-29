@@ -14,6 +14,6 @@ const char* MQTT_PUB_GW_RSSI = "lora/gateway/rssi/wifi";
 
 // Messages queue from LoRa Node
 const char* MQTT_PUB_PREFIX = "lora/node";
-const char* MQTT_PUB_DATA = "/data";
+const char* MQTT_PUB_DATA = "/events";
 
 

@@ -6,8 +6,11 @@ const char* VERSION = "0.044";
 
 
 //LoRa Destination Adress / send to
-byte destination = 0xAA;  
+byte destination = 0xAA; 
 
+
+// Speed Serial Monitor
+#define BAUD 115200
 
 const int SLEEP = 60;         // seconds to Sleep
 const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900

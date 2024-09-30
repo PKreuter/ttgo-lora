@@ -4,6 +4,7 @@
 
 
 //Libraries for OLED Display
+#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 //define OLED instance
@@ -28,22 +29,12 @@ void initOLED() {
   display.setCursor(0,20);
   display.print("OLED Display OK!");
   display.display();
-
 }
 
-void showVersion(){
-  display.setCursor(0,0);
-  display.print("Version: ");
-  display.println(VERSION);
-  display.setCursor(0,10);
-  display.print("LoRa Node: 0x");
-  display.println(localAddress, HEX);
-  display.display();
-}
+
 
 
 //Libraries for LoRa
-#include <Wire.h>
 #include <SPI.h>
 #include <LoRa.h>
 

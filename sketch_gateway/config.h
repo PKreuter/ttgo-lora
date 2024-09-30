@@ -8,6 +8,9 @@ const char* NAME = "Gateway";
 // address of this device
 byte localAddress = 0xAA;           
 
+// Speed Serial Monitor
+#define BAUD 115200
+
 // setting for MQTT liveness message 
 #if TEST_ENABLED
 #define intervalMillis 10000  // TEST, interval for liveness

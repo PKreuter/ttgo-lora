@@ -29,4 +29,14 @@ Sensor: Joyit SEN-US01
 
 
 
+Libraries
+
+
+https://registry.platformio.org/libraries/heman/AsyncMqttClient-esphome
+
+
+
+https://github.com/josephpal/esp32-Encrypt/tree/master
+
+
 

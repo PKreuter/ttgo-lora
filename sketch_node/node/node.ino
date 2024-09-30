@@ -47,6 +47,8 @@ PINs, welche wahrscheinlich reserviert sind
   15  DHT Sensor   // PIN 15 ev nur digital
   18  LoRa CS / SS
   19  LoRa MISO
+  21  SDA  Display
+  22  SLC  Display
   23  LoRa RST
   25  
   26  LoRa DIO0
@@ -68,12 +70,18 @@ PINs, welche wahrscheinlich reserviert sind
 
 */ 
 
-//#include "config-node-a1.h"
-#include "config-node-a2.h"
+#include "config-node-a1.h"
+//#include "config-node-a2.h"
 
+// Sensitive configs
+#include "secrets.h"   
+
+// 
 #include "config.h" 
 #include "sensor.h"
 #include "init.h"
+
+
 
 //https://github.com/adafruit/Adafruit_SleepyDog/tree/master
 #include <Adafruit_SleepyDog.h>
@@ -144,13 +152,29 @@ int interval = 50;            // interval between sends
 uint32_t delayMS;
 
 JsonDocument doc;
-char jsonSerial[500];
+char jsonSerialPlain[500];  // Plaintext
+
+#include "mbedtls/aes.h"
+#include "Cipher.h"
+Cipher * cipher = new Cipher();
+
+
+
+void showVersion(){
+  display.setCursor(0,0);
+  display.print("Version: ");
+  display.println(VERSION);
+  display.setCursor(0,10);
+  display.print("LoRa Node: 0x");
+  display.println(localAddress, HEX);
+  display.display();
+}
 
 
 void setup() {
 
   //initialize Serial Monitor
-  Serial.begin(115200);
+  Serial.begin(BAUD);
   Serial.println("***LoRa Node - Version " +String(VERSION));
 
   // Battery Pin as an analog input 
@@ -181,6 +205,9 @@ void setup() {
   showVersion();
   initLoRa();
 
+  // cipher, set key
+  cipher->setKey(key);
+
   //Increments boot number and prints it every reboot
   bootCount++;
   Serial.println("Boot number: " + String(bootCount));
@@ -188,13 +215,11 @@ void setup() {
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1); //1 = High, 0 = Low
-
-  // get and print sleep mode to OLED
-  //getSleepModeState();
-  //print_sleep_info();
   
   // sleep to hold messages on display
   delay(1 * mS_TO_S_FACTOR);
+
+
 
 }
 
@@ -234,7 +259,6 @@ void print_sleep_info() {
     display.print("s");
     display.display();
   }
-
 }
 
 
@@ -430,14 +454,6 @@ void LoRa_txMode(){
 //Send data to receiver node using LoRa
 void sendReadings() {
 
-  /**
-  //Watchdog.disable();
-  int countdownMS = Watchdog.enable(20 * 1000);
-  Serial.print("Enabled the watchdog with max countdown of ");
-  Serial.print(countdownMS, DEC);
-  Serial.println(" milliseconds!");
-  **/
-
   msgCounter++;
 
   // localAddress as 0xAA
@@ -454,7 +470,7 @@ void sendReadings() {
   doc1["message"] = msgCounter;
   doc1["temperature"] = Temperature;
   doc1["humidity"] = Humidity;
-  doc1["pressure"] = Pressure;
+  //doc1["pressure"] = Pressure;
 
   doc1["sensor_value"] = sensorValue;
   if (sensorState == LOW && sensorValue == 0) {
@@ -462,13 +478,16 @@ void sendReadings() {
     doc1["diepostistda"] = "not-defined";
   }
   else if (sensorState == LOW) {
-    doc1["sensor_state"] = "low";
+    doc1["sensor_state"] = "true";
+    //doc1["sensor_state"] = "low";
     doc1["diepostistda"] = "true";
   } else {
-    doc1["sensor_state"] = "high";
+    doc1["sensor_state"] = "true";
+    //doc1["sensor_state"] = "high";
     doc1["diepostistda"] = "false";
   }
 
+  /**
   // enable wenn botten
   if ( enableButton == true ) {
     if (sensorState == HIGH) {
@@ -479,11 +498,17 @@ void sendReadings() {
       doc1["diepostistda"] = "false";
     }
   }
+  **/
 
   doc1["vbattery"] = VBAT;
   doc1["wakeup_reason"] = esp_sleep_get_wakeup_cause();
   
-  serializeJson(doc, jsonSerial);
+  serializeJson(doc, jsonSerialPlain);
+
+  cipher->setKey(key);
+
+  Serial.println("\nCiphered text:");
+  String encrypted_payload = cipher->encryptString(jsonSerialPlain);
   
   //Send LoRa packet to receiver
   Serial.println("LoRa, begin to send packet to Gateway");
@@ -491,13 +516,16 @@ void sendReadings() {
   LoRa.write(destination);              // add destination address
   LoRa.write(localAddress);             // add sender address
   LoRa.write(byte(msgCounter));         // add message ID
-  LoRa.write(LoRaMessage.length());     // add payload length
-  LoRa.print(jsonSerial);
+  //LoRa.write(LoRaMessage.length());     // add payload length
+  //LoRa.print(jsonSerial);
+  LoRa.write(encrypted_payload.length());        // add payload length
+  LoRa.print(encrypted_payload);                 // add payload
   LoRa.endPacket();
   //LoRa.endPacket(true); // true = async / non-blocking mode
   
   Serial.printf("LoRa, send packet done: %d\n", msgCounter);
-  Serial.println(jsonSerial);
+  Serial.println(jsonSerialPlain);
+  //Serial.println(encrypted_payload);
 
   // 
   //Watchdog.reset();
@@ -540,6 +568,7 @@ void loop() {
   getReadings();
   getVbat();
   sendReadings();
+
 
   // sleep to hold messages on display
   delay(2 * mS_TO_S_FACTOR); 

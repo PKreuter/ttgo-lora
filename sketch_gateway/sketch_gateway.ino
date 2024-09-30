@@ -67,8 +67,11 @@ int countdownMS = Watchdog.enable(60 * 1000);
 #include <ArduinoJson.h>
 char jsonSerial[500];  // length of JSON
 JsonDocument doc;      // to store input
-JsonDocument json_val; // 
+JsonDocument json_val; // contains JSON from Node
 
+#include "mbedtls/aes.h"
+#include "Cipher.h"
+Cipher * cipher = new Cipher();
 
 // Create objects to handle MQTT client
 AsyncMqttClient mqttClient;
@@ -89,9 +92,9 @@ String epochtime;
 // Initialize variables to get and save LoRa data
 unsigned long loraPacketRecv = 0;   // counter number of messages
 String loraRecvFrom;
-String DATA;
 String loraRssi;
 String loraSnr;
+bool loraHasData = false;
 
 // Initialize variables to get and save Wifi data
 String rssiWiFi;
@@ -106,6 +109,15 @@ AsyncWebServer server(80);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziierung
 
 // OLED line 1..6, writePixel (x, y, color)
+int displayRow1 = 0;
+int displayRow2 = 11;
+int displayRow3 = 19;
+int displayRow4 = 28;
+int displayRow5 = 38;
+int displayRow6 = 47;
+int displayRow7 = 56;
+
+
 int disPos_y0 = 0;
 int disPos_y1 = 11;
 int disPos_y2 = 19;
@@ -137,7 +149,7 @@ void showVersion(){
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(BAUD);
   Serial.println("***LoRa Receiver " +String(VERSION));
 
   // enable watchdog, used when WiFi not comes up
@@ -188,6 +200,9 @@ void setup() {
 
   Watchdog.disable();
   Serial.println("All seems Connected, disable Watchdog");
+
+   // cipher
+  cipher->setKey(key);
 
   // Webserver
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -294,94 +309,19 @@ void initLoRA() {
   }
   Serial.println("LoRa Initialization OK!");
 
-  display.setCursor(0,30);
-  // reset line
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  //display.print("LoRa Initializing OK!");
-  display.setCursor(0,30);
-  display.print("LoRa receiver: OK");
-  display.display();
-  delay(2000);
+  // display, reset line and write new message
+  oledWriteMsg(displayRow4, "LoRa receiver: OK");
+  
+  // sleep to hold messages on display
+  delay(2 * mS_TO_S_FACTOR);
+
   Watchdog.reset();
 }
 
 
+
 void notFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "Not found");
-}
-
-
-// Read LoRa packet and get JSON
-void getLoRaData() {
-  Serial.println("Lora packet received: ");
-  loraPacketRecv++;
-
-  // read packet header bytes:
-  int recipient = LoRa.read();          // recipient address
-  byte sender = LoRa.read();            // sender address
-  byte incomingMsgId = LoRa.read();     // incoming msg ID
-  byte incomingLength = LoRa.read();    // incoming msg length
-
-  loraRecvFrom = String(sender, HEX);
-
-  // if message is for this device, or broadcast, print details:
-  Serial.println(" Received from: 0x" + loraRecvFrom);
-
-  Serial.println(" Sent to: 0x" + String(recipient, HEX));
-  Serial.println(" Message ID: " + String(incomingMsgId));
-  Serial.println(" Message length: " + String(incomingLength));
-  Serial.println(" RSSI: " + String(LoRa.packetRssi()));
-  Serial.println(" Snr: " + String(LoRa.packetSnr()));
-  //Serial.println();
-
-  // Get RSSI / SNR
-  loraRssi = LoRa.packetRssi();
-  loraSnr = LoRa.packetSnr();
-
-  // if the recipient isn't this device or broadcast,
-  if (recipient != localAddress && recipient != 0xFF) {
-    Serial.println(" *This message is not for me.");
-    DATA = LoRa.readString();
-    Serial.print("*LoRa Data: ");
-    Serial.print(DATA); 
-    ;
-    return;               // skip rest of function
-  }
-
-  display.setCursor(0,disPos_y5);
-  // reset line
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,disPos_y5);
-  display.printf("LoRa recv: %s  ", String(loraPacketRecv));
-
-  //display.setCursor(0,disPos_y6);
-  // reset line
-  //display.setTextColor(BLACK, BLACK);
-  //display.println("                               "); 
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,disPos_y6);
-  display.printf("LoRa RSSI: %s  ", String(loraRssi));
-  display.display();
-
-  // Read packet
-  while (LoRa.available()) {
-    DATA = LoRa.readString();
-    Serial.print("*LoRa Data: ");
-    Serial.print(DATA); 
-    //Serial.print(" with RSSI ");    
-    //Serial.println(loraRssi);
-
-    if(DATA.indexOf("data") > 0) {
-      JsonDocument doc;
-      deserializeJson(doc, DATA);
-      json_val = doc["data"];
-    } 
-
-  }
-
 }
 
 
@@ -393,11 +333,9 @@ void connectToWifi() {
     Serial.print(".");
   }
   
-  display.setCursor(0,10);
   // reset line
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  display.setTextColor(WHITE, BLACK);
+  oledClearRow(10);
+  // write new
   display.setCursor(0,10);
   display.print("IP: ");
   display.setCursor(20,10);
@@ -478,41 +416,153 @@ void onMqttPublish(uint16_t packetId) {
   publishMsgCount = String(packetId);
 }
 
+/**
+void getTs() {
+  timeClient.update();
+  long ts = timeClient.getEpochTime();
+  String ts_string = timeClient.getFormattedTime();
+  return long(ts), String(ts_string);
+}
+**/
 
 
 void update_display() {
 
-  display.setCursor(0,0);
+  // display, reset line and write new message
+  oledWriteMsg(0, "Running... Status: OK");
+ 
   // reset line
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  //  display.setTextColor(WHITE);  
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,0);
-  display.print("Running... Status: OK");   
-  display.display();   
-  
-  // reset line
-  display.setCursor(0, disPos_y2);
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  //  display.setTextColor(WHITE);  
-  display.setTextColor(WHITE, BLACK);
-  display.setCursor(0,disPos_y2);
+  oledClearRow(displayRow3); 
+  // write new
+  //oledWriteMsg(disPos_y2, sprintf("WiFi RSSI: %s", rssiWiFi)
+  display.setCursor(0, displayRow3);
   display.print("WiFi RSSI: ");   
-  display.setCursor(70,disPos_y2);
+  display.setCursor(70, displayRow3);
   display.print(rssiWiFi);      
 
   // reset line
-  display.setCursor(0, disPos_y3);
-  display.setTextColor(BLACK, BLACK);
-  display.println("                             "); 
-  //  display.setTextColor(WHITE);  
-  display.setTextColor(WHITE, BLACK);
+  oledClearRow(displayRow4);  
   // write new
-  display.setCursor(0, disPos_y3);
-  display.printf("MQTT send: %s", publishMsgCount);
+  //oledWriteMsg(displayRow4, sprintf("MQTT send: %s", publishMsgCount))
+  display.setCursor(0, displayRow4);
+  display.printf("MQTT send: %s       ", publishMsgCount);
   display.display();
+}
+
+
+// Clear row/line 
+void oledClearRow(int row) {
+  display.setCursor(0, row);
+  display.setTextColor(BLACK, BLACK);
+  display.print("                          ");
+  display.display();
+  display.setTextColor(WHITE, BLACK);
+}
+
+// Write row/line
+void oledWriteMsg(int row, char msg[30]) {
+  oledClearRow(row);
+  display.setCursor(0, row);
+  display.print(msg);
+  display.display();
+}
+
+
+
+
+// Read LoRa packet and get JSON
+void getLoRaData() {
+  Serial.println("Lora packet received: ");
+  loraPacketRecv++;
+
+  // read packet header bytes:
+  int recipient = LoRa.read();          // recipient address
+  byte sender = LoRa.read();            // sender address
+  byte incomingMsgId = LoRa.read();     // incoming msg ID
+  byte incomingLength = LoRa.read();    // incoming msg length
+
+  loraRecvFrom = String(sender, HEX);
+
+  // if message is for this device, or broadcast, print details:
+  Serial.println(" Received from: 0x" + loraRecvFrom);
+
+  Serial.println(" Sent to: 0x" + String(recipient, HEX));
+  Serial.println(" Message ID: " + String(incomingMsgId));
+  Serial.println(" Message length: " + String(incomingLength));
+  Serial.println(" RSSI: " + String(LoRa.packetRssi()));
+  Serial.println(" Snr: " + String(LoRa.packetSnr()));
+
+  // Get RSSI / SNR
+  loraRssi = LoRa.packetRssi();
+  loraSnr = LoRa.packetSnr();
+
+  // if the recipient isn't for this device or broadcast,
+  if (recipient != localAddress && recipient != 0xFF) {
+    Serial.println(" *This message is not for me.");
+    String loraData = LoRa.readString();
+    Serial.print(" Data: ");
+    Serial.println(loraData); 
+    
+    if( true ) {
+      timeClient.update();
+      long ts = timeClient.getEpochTime();
+      // add fields from gateway and node-data as json-evelope
+      JsonDocument doc; 
+      char jsonSerial[200]; 
+      doc["ts"] = ts;
+      //doc["ts_string"] = ts_string;
+      doc["type"] = "message from unknow lora node";
+      doc["recipient"] = recipient;
+      doc["loraRecvFrom"] = loraRecvFrom;
+      doc["incomingMsgId"] = incomingMsgId;
+      doc["incomingLengt"] = incomingLength;
+      serializeJson(doc, jsonSerial);
+
+      uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_GW_EVENTS, 1, true, jsonSerial);
+      Serial.printf("Publishing on topic %s at QoS 1, packetId %i: \n", MQTT_PUB_GW_EVENTS, packetIdPub3);
+    }
+
+    ;
+    return;               // skip rest of function
+  }
+
+
+  // Read packet
+    while (LoRa.available()) {
+    String loraData = LoRa.readString();
+    if(loraData.indexOf("data") > 0) {
+      Serial.printf(" Receive Plain Data: \n ");  // muss so sein
+      Serial.println(loraData);
+      JsonDocument doc; 
+      deserializeJson(doc, loraData);
+      json_val = doc["data"];
+      loraHasData = true;
+    } 
+    else {
+      Serial.printf(" Received Ciphered Data, decrypted: \n ");
+      String decrypted_payload = cipher->decryptString(loraData);
+      Serial.println(decrypted_payload); 
+      JsonDocument doc;
+      deserializeJson(doc, decrypted_payload);
+      json_val = doc["data"];
+      loraHasData = true;
+    }
+
+  }
+ 
+  // reset line
+  oledClearRow(disPos_y5);
+  // write new
+  display.setCursor(0,disPos_y5);
+  display.printf("LoRa recv: %s  ", String(loraPacketRecv));
+
+  // reset line
+  oledClearRow(disPos_y6);
+  // write new
+  display.setCursor(0,disPos_y6);
+  display.printf("LoRa RSSI: %s  ", String(loraRssi));
+  display.display();
+
 }
 
 
@@ -523,8 +573,8 @@ void loop() {
   if (packetSize) {
     getLoRaData();
     
-    // we had data
-    if(DATA.indexOf("data") > 0) {
+    // we had lora data
+    if(loraHasData) {
 
       timeClient.update();
       long ts = timeClient.getEpochTime();
@@ -532,7 +582,7 @@ void loop() {
       //Serial.printf("Time:  %i - %s\n", ts, ts_string);
       Serial.print(ts);
       Serial.print(" - ");
-      Serial.print(ts_string); 
+      Serial.println(ts_string); 
       // Serial.println(timeClient.getFormattedTime());              
 
       // add fields from gateway and node-data as json-evelope
@@ -548,7 +598,8 @@ void loop() {
       uint16_t packetIdPub0 = mqttClient.publish(String(topic).c_str(), 1, true, jsonSerial);
       Serial.printf("Publishing on topic %s at QoS 1, packetId: %i: Message %s\n", 
         topic.c_str(), packetIdPub0, jsonSerial);
-    
+      
+      loraHasData = false;
     }
  
   }

@@ -52,20 +52,18 @@ void getSensorUSValue() {
   if (Abstand >= maximumRange || Abstand <= minimumRange) {
     // Falls nicht wird eine Fehlermeldung ausgegeben.
     Serial.println("US-Sensor, Abstand ausserhalb des Messbereichs");
-    //Serial.println("-----------------------------------");
   }
   else {
     // Der berechnete Abstand wird in der seriellen Ausgabe ausgegeben
     Serial.print("US-Sensor, Der Abstand betraegt: ");
     Serial.print(Abstand);
     Serial.println(" cm");
-    //Serial.println("-----------------------------------");  
   }
 
   sensorValue = Abstand;
   Serial.print("US-Sensor, Analog IO - Sensor value: ");
   Serial.print(sensorValue);
-  if ( sensorValue > 5 ) {
+  if ( sensorValue > 6 and sensorValue < 30) {
     sensorState = HIGH;
     Serial.print(" - Sensor state: ");
   } 

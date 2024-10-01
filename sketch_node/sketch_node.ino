@@ -1,29 +1,12 @@
 /**
 
 This is the LoRa Node Code 
-
-LILYGO / TTGO LORA - Model T3V1.6.1
-
-1) Node send a JSON String to LoRA Gateway
-{"data":[
-  {"name":"Test-Node","node":"0xA2","type":"lora","message":3,"temperature":0,"humidity":0,"pressure":0,"sensor_state":"low","diepostistda":"true","sensor_value":0,"vbattery":4.527970791}
-]}
+- LILYGO / TTGO LORA - Model T3V1.6.1
+- Send Data as JSON
+- Use AES to encrypt payload
 
 
-2) LoRa Gateway receive LoRa message
-3) LoRa Gateway add ts and send to MQTT over WiFi
-{"ts":1722536448,
- "data":[
-  {"name":"Test-Node","node":"0xA2","type":"lora","message":763,"temperature":0,"humidity":0,"pressure":0,"sensor_state":"low","diepostistda":"true","sensor_value":70,"vbattery":4.519106388}
-]}
-
-
-
-CHANGES
-- US
-- IR Sensor DFRobot SEN0523 change to Analog-Input
-- BMP280
-
+// you should not use global defined variables of type String. The variable-type String eats up all RAM over time
 
 RULES
 - Default with DEEP_SLEEP_MODE
@@ -50,7 +33,7 @@ PINs, welche wahrscheinlich reserviert sind
   21  SDA  Display
   22  SLC  Display
   23  LoRa RST
-  25  
+  25  LED green
   26  LoRa DIO0
   27  LoRa MOSI
   34  Wakeup digital
@@ -70,8 +53,8 @@ PINs, welche wahrscheinlich reserviert sind
 
 */ 
 
-#include "config-node-a1.h"
-//#include "config-node-a2.h"
+//#include "config-node-a1.h"
+#include "config-node-a2.h"
 
 // Sensitive configs
 #include "secrets.h"   
@@ -82,13 +65,13 @@ PINs, welche wahrscheinlich reserviert sind
 #include "init.h"
 
 
-
 //https://github.com/adafruit/Adafruit_SleepyDog/tree/master
 #include <Adafruit_SleepyDog.h>
 
 //Libraries for OLED Display
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "oled.h"
 
 //Libraries to create Json Documents
 #include <ArduinoJson.h>
@@ -98,7 +81,8 @@ PINs, welche wahrscheinlich reserviert sind
  others = Mode 2 'sleep'
  both LOW = Disabled as 'wait_for'
 **/
-const int sleepModePin1 = 36;   //2
+//const int sleepModePin1 = 36; 
+const int sleepModePin1 = 13;  
 const int sleepModePin2 = 39;   //2
 // variable for store the sleepmode
 int sleepMode = 1;   // 0=no sleep, 1=deep, 2=short
@@ -106,36 +90,37 @@ int wait_for = 15;   // every n seconds
 
 // digital IO as Output
 const int pwrPin =  14;  // Power Sensor
-//const int pwrPin =  25;  // Power Sensor
 
 //const char* wakeUpPin = GPIO_NUM_34;
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
 
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
-
+// Send LoRa packets
+const int ledPin =  25;
 
 // OLED line 0..6, writePixel (x, y, color)
-int disPos_y0 = 0;
-int disPos_y1 = 11;
-int disPos_y2 = 20;
-int disPos_y3 = 29;
-int disPos_y4 = 38;
-int disPos_y5 = 47;
-int disPos_y6 = 56;
+int displayRow1 = 0;
+int displayRow2 = 11;
+int displayRow3 = 19;
+int displayRow4 = 28;
+int displayRow5 = 38;
+int displayRow6 = 47;
+int displayRow7 = 56;
+
+
+// Buffer to write message to display
+char text[25] = {0};
 
 
 //global variables for temperature and Humidity
 float Temperature = 0;
 float Humidity = 0;
 float Pressure = 0;
+uint32_t delayMS;  // ???
 
 // battery voltage from ESP32 ADC read
 float VBAT;  
-
-//initilize packet counter
-int readingID = 0;
-String LoRaMessage = "";
 
 
 // Using RTC Memory to Store Data During Sleep, so that it will not be deleted during the deep sleep
@@ -144,35 +129,22 @@ RTC_DATA_ATTR unsigned int msgCounter = 0;
 RTC_DATA_ATTR int bootCount = 0; 
 
 
-
-long lastSendTime = 0;        // last send time
-int interval = 50;            // interval between sends
-
-
-uint32_t delayMS;
-
-JsonDocument doc;
-char jsonSerialPlain[500];  // Plaintext
-
-#include "mbedtls/aes.h"
-#include "Cipher.h"
-Cipher * cipher = new Cipher();
+// encrypt / decrypt lora messages
+#include "aes.h"
+#include <base64.h>
 
 
 
 void showVersion(){
-  display.setCursor(0,0);
-  display.print("Version: ");
-  display.println(VERSION);
-  display.setCursor(0,10);
-  display.print("LoRa Node: 0x");
-  display.println(localAddress, HEX);
-  display.display();
+  display.clearDisplay();
+  sprintf(text, "Version %s", String(VERSION));
+  oledWriteMsg(0, text);
+  sprintf(text, "LoRa Node 0x%s", String(localAddress, HEX));
+  oledWriteMsg(10, text);
 }
 
 
 void setup() {
-
   //initialize Serial Monitor
   Serial.begin(BAUD);
   Serial.println("***LoRa Node - Version " +String(VERSION));
@@ -195,7 +167,10 @@ void setup() {
   // initialize the power pin as an output
   pinMode(pwrPin, OUTPUT);
   digitalWrite(pwrPin, HIGH); // set power on
- 
+
+  // initialize green LED to indicate send packets
+  pinMode(ledPin, OUTPUT);
+
   // initialize Sensors/OLED/LoRa
   initDHT();
   if ( enableBMP == true ) {
@@ -205,8 +180,9 @@ void setup() {
   showVersion();
   initLoRa();
 
-  // cipher, set key
-  cipher->setKey(key);
+  // AES
+  aes_init();
+  aesLib.set_paddingmode(paddingMode::CMS);
 
   //Increments boot number and prints it every reboot
   bootCount++;
@@ -219,45 +195,25 @@ void setup() {
   // sleep to hold messages on display
   delay(1 * mS_TO_S_FACTOR);
 
-
-
 }
 
 
 
 void print_sleep_info() {
   if (sleepMode == 1) {
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0,45);
-    display.print("SLEEP Mode 1 DEEP");
-    display.setCursor(0,55);
-    display.print("Update every ");
-    display.print(DEEP_SLEEP);
-    display.print("s");    
-    display.display();
+    oledWriteMsg(45, "SLEEP Mode 1 - DEEP");
+    sprintf(text, "Update every %ss", String(DEEP_SLEEP));
+    oledWriteMsg(55, text);
   }
   else if (sleepMode == 2) {
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0,45);
-    display.print("SLEEP Mode 2");
-    display.setCursor(0,55);
-    display.print("Update every ");
-    display.print(SLEEP);
-    display.print("s");    
-    display.display();
+    oledWriteMsg(45, "SLEEP Mode 2");
+    sprintf(text, "Update every %ss", String(SLEEP));
+    oledWriteMsg(55, text);
   }
   else {
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setCursor(0,45);
-    display.print("SLEEP Mode 0");
-    display.setCursor(0,55);
-    display.print("Update every ");
-    display.print(wait_for);
-    display.print("s");
-    display.display();
+    oledWriteMsg(45, "SLEEP Mode 0");
+    sprintf(text, "Update every %ss", String(wait_for));
+    oledWriteMsg(55, text);
   }
 }
 
@@ -305,7 +261,6 @@ void getBMPreadings() {
   Serial.print(F("Temperature = "));
   Serial.print(bmp.readTemperature());
   Serial.println(" *C");
-
 }
 
 
@@ -313,30 +268,9 @@ void getSleepModeState() {
 
   int sleepModeValue1 = 0;
   int sleepModeValue2 = 0;
-  /**
-  sleepModeValue = analogRead(sleepModePin);
-  
-  Serial.print("Sleep PIN: ");
-  Serial.print(sleepModePin);
-  Serial.print(" - Value: ");
-  Serial.print(sleepModeValue);
-  Serial.print(" - Sleep: ");
-  if (sleepModeValue < 300) {
-    sleepMode = 1;
-    Serial.print("enabled");
-  } 
-  else if (sleepModeValue == 4095) {
-    sleepMode = 0;
-    Serial.print("disabled");
-  } 
-  else { 
-    sleepMode = 2;
-    Serial.print("enabled");
-  }
-  Serial.printf(" - Mode: %i\n", sleepMode);
-  **/
   sleepModeValue1 = digitalRead(sleepModePin1);
   sleepModeValue2 = digitalRead(sleepModePin2);
+
   Serial.print("Sleep PIN: ");
   Serial.print(sleepModePin1);
   Serial.print(" - Value: ");
@@ -385,50 +319,29 @@ void print_wakeup_reason(){
 //Display Readings on OLED
 void displayReadings() {
   display.clearDisplay();
-  display.setCursor(0,disPos_y0);
-  display.print("RUNNING... Status: OK");
-  display.setCursor(0,disPos_y1);
-  display.setTextSize(1);
-  display.print("Temperature : ");
-  display.setCursor(80,disPos_y1);
-  display.print(Temperature);
-  display.drawCircle(116,disPos_y1,1, WHITE);
-  display.setCursor(121,disPos_y1);
-  display.print("C");
-  display.setCursor(0,disPos_y2);
-  display.print("Humidity(%) : ");
-  display.setCursor(80,disPos_y2);
-  display.print(Humidity);
-  display.setCursor(116,disPos_y2);
-  display.print("Rh");
-  display.setCursor(0,disPos_y3);
-  display.print("Pressure : ");
-  display.setCursor(62,disPos_y3);
-  display.print(Pressure);
-  display.setCursor(103,disPos_y3);
-  display.print("mmHg");
-  display.setCursor(0,disPos_y4);
-  display.print("Battery : ");
-  display.setCursor(60,disPos_y4);
-  display.print(VBAT);
-  display.setCursor(98,disPos_y4);
-  display.print("Volts");
-  display.display();
+  oledWriteMsg(displayRow1, "RUNNING... Status: OK");
+  sprintf(text, "Temperature : %sC", String(Temperature));
+  oledWriteMsg(displayRow2, text);
+  sprintf(text, "Humidity(%) : %sRh", String(Humidity));
+  oledWriteMsg(displayRow3, text);
+  sprintf(text, "Pressure : %s mmHg", String(Pressure));
+  oledWriteMsg(displayRow4, text);
+  sprintf(text, "Battery : %s Volts", String(VBAT));
+  oledWriteMsg(displayRow5, text);
 
   if (sensorState == LOW && sensorValue == 0) {
-    display.setCursor(0,disPos_y5);
-    display.printf("Post : ERROR / %i", sensorValue);
+    sprintf(text, "Post : ERROR / %s", String(sensorValue));
+    oledWriteMsg(displayRow6, text);
   }
   else if (sensorState == LOW) {
-    display.setCursor(0,disPos_y5);
-    display.printf("Post :   TRUE / %i", sensorValue);
+    sprintf(text, "Post : TRUE / %s", String(sensorValue));
+    oledWriteMsg(displayRow6, text);    
   } else {
-    display.setCursor(0,disPos_y5);
-    display.printf("Post :   FALSE / %i", sensorValue);
+    sprintf(text, "Post : FALSE / %s", String(sensorValue));
+    oledWriteMsg(displayRow6, text); 
   }
-  display.setCursor(0,disPos_y6);
-  display.printf("LoRa send : %i", msgCounter);
-  display.display();  
+  sprintf(text, "LoRa send :%s", String(msgCounter));
+  oledWriteMsg(displayRow7, text); 
 }
 
 void getVbat() {
@@ -444,16 +357,8 @@ void getVbat() {
 }
 
 
-void LoRa_txMode(){
-  LoRa.idle();                          // set standby mode
-  LoRa.disableInvertIQ();               // normal mode
-}
-
-
-
 //Send data to receiver node using LoRa
 void sendReadings() {
-
   msgCounter++;
 
   // localAddress as 0xAA
@@ -461,13 +366,11 @@ void sendReadings() {
   sprintf(nodeAddress, "0x%02X", localAddress);
 
   JsonDocument doc;
-  char jsonSerial[500];
+  char jsonSerial[230];
   JsonArray data = doc["data"].to<JsonArray>();
   JsonObject doc1 = data.createNestedObject();
-  doc1["name"] = NAME;
   doc1["node"] = nodeAddress;
-  doc1["type"] = "lora";
-  doc1["message"] = msgCounter;
+  doc1["msg_num"] = msgCounter;
   doc1["temperature"] = Temperature;
   doc1["humidity"] = Humidity;
   //doc1["pressure"] = Pressure;
@@ -475,60 +378,57 @@ void sendReadings() {
   doc1["sensor_value"] = sensorValue;
   if (sensorState == LOW && sensorValue == 0) {
     doc1["sensor_state"] = "error";
-    doc1["diepostistda"] = "not-defined";
   }
   else if (sensorState == LOW) {
     doc1["sensor_state"] = "true";
-    //doc1["sensor_state"] = "low";
-    doc1["diepostistda"] = "true";
   } else {
     doc1["sensor_state"] = "true";
-    //doc1["sensor_state"] = "high";
-    doc1["diepostistda"] = "false";
   }
-
-  /**
-  // enable wenn botten
-  if ( enableButton == true ) {
-    if (sensorState == HIGH) {
-      doc1["sensor_state"] = "low";
-      doc1["diepostistda"] = "true";
-    } else {
-      doc1["sensor_state"] = "high";
-      doc1["diepostistda"] = "false";
-    }
-  }
-  **/
 
   doc1["vbattery"] = VBAT;
   doc1["wakeup_reason"] = esp_sleep_get_wakeup_cause();
-  
-  serializeJson(doc, jsonSerialPlain);
 
-  cipher->setKey(key);
+  // serialize
+  serializeJson(doc, jsonSerial);
+  Serial.print("Jsontext: "); Serial.println(jsonSerial);
 
-  Serial.println("\nCiphered text:");
-  String encrypted_payload = cipher->encryptString(jsonSerialPlain);
-  
+  // Encrypt
+  byte enc_iv[N_BLOCK] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; // iv_block gets written to, provide own fresh copy...
+  String encrypted = encrypt_impl(jsonSerial, enc_iv);
+  //Serial.print("Ciphertext: "); Serial.println(encrypted);
+  //Serial.print("Ciphertext length: "); Serial.println(encrypted.length());
+
+  // send ERROR message wenn Packet > 256
+  if(encrypted.length() > 240) {
+    Serial.println("ERROR: LoRa Packet to big");
+    JsonDocument doc;
+    char jsonSerial[230];
+    JsonArray data = doc["data"].to<JsonArray>();
+    JsonObject doc1 = data.createNestedObject();
+    doc1["node"] = nodeAddress;
+    doc1["msg_num"] = msgCounter;
+    doc1["message"] = "ERROR LoRa Packet to big";
+    serializeJson(doc, encrypted);
+  }
+
+  Serial.print("Ciphertext: "); Serial.println(encrypted);
+  Serial.print("Ciphertext length: "); Serial.println(encrypted.length());
+
   //Send LoRa packet to receiver
   Serial.println("LoRa, begin to send packet to Gateway");
+  digitalWrite(ledPin, HIGH); 
   LoRa.beginPacket();
   LoRa.write(destination);              // add destination address
   LoRa.write(localAddress);             // add sender address
   LoRa.write(byte(msgCounter));         // add message ID
-  //LoRa.write(LoRaMessage.length());     // add payload length
-  //LoRa.print(jsonSerial);
-  LoRa.write(encrypted_payload.length());        // add payload length
-  LoRa.print(encrypted_payload);                 // add payload
+  LoRa.write(encrypted.length());        // add payload length
+  LoRa.print(encrypted);                 // add payload
   LoRa.endPacket();
   //LoRa.endPacket(true); // true = async / non-blocking mode
-  
-  Serial.printf("LoRa, send packet done: %d\n", msgCounter);
-  Serial.println(jsonSerialPlain);
-  //Serial.println(encrypted_payload);
+  digitalWrite(ledPin, LOW); 
 
-  // 
-  //Watchdog.reset();
+  Serial.printf("LoRa, send packet done: %d\n", msgCounter);
+
   displayReadings();
 
 }
@@ -562,13 +462,13 @@ void getReadings() {
 
 
 
+
 void loop() {
 
   Serial.println("----------------------------------------------------------------------");
   getReadings();
   getVbat();
   sendReadings();
-
 
   // sleep to hold messages on display
   delay(2 * mS_TO_S_FACTOR); 
@@ -605,8 +505,7 @@ void loop() {
     delay((5) * mS_TO_S_FACTOR);  // show display for +5 secondsdelay
     display.clearDisplay();
     print_sleep_info();;
-    // not sleep but wait some seconds
-    delay((wait_for -9) * mS_TO_S_FACTOR);  // delay
+    delay((wait_for -9) * mS_TO_S_FACTOR);  // not sleep but wait some seconds
   }
 
 }

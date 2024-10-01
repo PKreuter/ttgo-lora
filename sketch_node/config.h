@@ -2,7 +2,7 @@
 
 
 //Version
-const char* VERSION = "0.044";
+const char* VERSION = "0.045";
 
 
 //LoRa Destination Adress / send to
@@ -35,7 +35,7 @@ Dabei wurde bei LoRa die „Adaptive Data Rate“ eingeführt:
 je nach Netzwerk Konfiguration wird über den Sender der Spreading Faktor zwischen SF7 und SF12 eingestellt.
 SF7 = range 2km, time on air 61ms, 5470bps
 **/
-#define loRaSpreadingFactor 7
+#define loRaSpreadingFactor 6
 
 //866E6 for Europe
 #define BAND 866E6

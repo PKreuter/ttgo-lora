@@ -4,7 +4,7 @@
 // MQTT Broker
 const char* MQTT_BROKER = "192.168.1.10";
 const int   MQTT_PORT = 1883;
-const char* MQTT_CLIENT_ID = "lora-receiver";
+const char* MQTT_CLIENT_ID = "lora-gateway";
 const char* MQTT_TOPIC = "emqx/esp32";
 
 // Message queue from LoRa Gateway

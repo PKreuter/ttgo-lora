@@ -9,16 +9,11 @@ const char* NAME = "Gateway";
 byte localAddress = 0xAA;           
 
 // Speed Serial Monitor
-#define BAUD 115200
+//#define BAUD 115200
 
 // setting for MQTT liveness message 
-#if TEST_ENABLED
-#define intervalMillis 10000  // TEST, interval for liveness
-#else
-#define intervalMillis 300000  // interval for liveness
-#endif
 //const long intervalMillis = 10000;  // TEST, interval for liveness
-//const long intervalMillis = 300000;  // interval for liveness
+const long intervalMillis = 300000;  // interval for liveness
 
 
 // LoRa define the pins used by the LoRa transceiver module

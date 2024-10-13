@@ -55,8 +55,8 @@ PINs,
 
 */ 
 
-#include "config-node-a1.h"
-//#include "config-node-a2.h"
+//#include "config-node-a1.h"
+#include "config-node-a2.h"
 
 
 // Sensitive configs
@@ -99,6 +99,9 @@ const int pwrPin =  14;  // Power Sensor
 
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
+// battery voltage from ESP32 ADC read
+float VBAT;
+
 // Send LoRa packets
 const int ledPin =  25;
 
@@ -121,9 +124,6 @@ float Temperature = 0;
 float Humidity = 0;
 float Pressure = 0;
 uint32_t delayMS;  // ???
-
-// battery voltage from ESP32 ADC read
-float VBAT;  
 
 
 // Using RTC Memory to Store Data During Sleep, so that it will not be deleted during the deep sleep
@@ -165,7 +165,6 @@ void setup()
  
   // initialize Sleep Pin as an analog input
   pinMode(sleepModePin1, INPUT);
-  pinMode(sleepModePin2, INPUT);
 
   // initialize the sensor 
   if ( enableButton == true ) {

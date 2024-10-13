@@ -5,6 +5,7 @@ This is the LoRa Node Code
 - Send Data as JSON
 - Use AES to encrypt payload
 
+!!! Zum Download US Sensor entfernen !!!
 
 // you should not use global defined variables of type String. The variable-type String eats up all RAM over time
 
@@ -19,15 +20,16 @@ External Components
 - DHT22
 
 
-PINs, welche wahrscheinlich reserviert sind
-  0   Boot / Sensor US Trigger
+PINs, 
+  0   Boot
   2   LOW=Chip in download mode.
+      Sensor Trogger
   4   Sensor US Echo
   5   LoRa SCK
   12  ??
-  13  
+  13  Sleep PIN digital
   14  LED Pin / MOS-FET to enabled Power for Sensors
-  15  DHT Sensor   // PIN 15 ev nur digital
+  15  DHT Sensor
   18  LoRa CS / SS
   19  LoRa MISO
   21  SDA  Display
@@ -38,7 +40,7 @@ PINs, welche wahrscheinlich reserviert sind
   27  LoRa MOSI
   34  Wakeup digital
   35  interval VBAT analog
-  36  Sleep PIN digital
+  36  
   39  Sleep PIN digital
 
   LED
@@ -143,7 +145,8 @@ void bufferSize(char* text, int &length)
 }
 
 
-void showVersion(){
+void showVersion()
+{
   sprintf(text, "Version %s", String(VERSION));
   oledWriteMsg(0, text);
   sprintf(text, "LoRa Node 0x%s", String(localAddress, HEX));
@@ -151,7 +154,8 @@ void showVersion(){
 }
 
 
-void setup() {
+void setup()
+{
   //initialize Serial Monitor
   Serial.begin(BAUD);
   Serial.println("***LoRa Node - Version " +String(VERSION));
@@ -206,7 +210,8 @@ void setup() {
 
 
 
-void print_sleep_info() {
+void print_sleep_info()
+{
   if (sleepMode == 1) {
     oledWriteMsg(45, "SLEEP Mode 1 - DEEP");
     sprintf(text, "Update every %ss", String(DEEP_SLEEP));
@@ -226,7 +231,8 @@ void print_sleep_info() {
 
 
 //function for fetching DHT readings
-void getDHTreadings() {
+void getDHTreadings()
+{
   // Delay between measurements.
   delay(delayMS);
   // Get temperature event and print its value.
@@ -256,7 +262,8 @@ void getDHTreadings() {
 
 
 //function for fetching BMP280 readings
-void getBMPreadings() {
+void getBMPreadings()
+{
   Pressure = bmp.readPressure()/100;
   //float SLP = bmp.seaLevelForAltitude(SEALEVELPRESSURE_HPA, Pressure);
   //float LLP = bmp.readAltitude(SLP);  //SEALEVELPRESSURE_HPA
@@ -271,7 +278,8 @@ void getBMPreadings() {
 }
 
 
-void getSleepModeState() {
+void getSleepModeState()
+{
 
   int sleepModeValue1 = 0;
   int sleepModeValue2 = 0;
@@ -308,7 +316,8 @@ void getSleepModeState() {
 /*
 Method to print the reason by which ESP32 has been awaken from sleep
 */
-void print_wakeup_reason(){
+void print_wakeup_reason()
+{
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
@@ -324,7 +333,8 @@ void print_wakeup_reason(){
 
 
 //Display Readings on OLED
-void displayReadings() {
+void displayReadings()
+{
   display.clearDisplay();
   oledWriteMsg(displayRow1, "RUNNING... Status: OK");
   sprintf(text, "Temperature : %sC", String(Temperature));
@@ -340,7 +350,7 @@ void displayReadings() {
     sprintf(text, "Post : ERROR / %s", String(sensorValue));
     oledWriteMsg(displayRow6, text);
   }
-  else if (sensorState == LOW) {
+  else if (sensorState == HIGH) {
     sprintf(text, "Post : TRUE / %s", String(sensorValue));
     oledWriteMsg(displayRow6, text);    
   } else {
@@ -351,7 +361,8 @@ void displayReadings() {
   oledWriteMsg(displayRow7, text); 
 }
 
-void getVbat() {
+void getVbat()
+{
   // Battery Voltage
   VBAT = (float)(analogRead(vbatPin)) / 4095*2*3.3*1.1;
   /*
@@ -365,7 +376,8 @@ void getVbat() {
 
 
 //Send data to receiver node using LoRa
-void sendReadings() {
+void sendReadings()
+{
   msgCounter++;
 
   // localAddress as 0xAA
@@ -374,8 +386,14 @@ void sendReadings() {
 
   JsonDocument doc;
   char jsonSerial[230];
-  JsonArray data = doc["data"].to<JsonArray>();
-  JsonObject doc1 = data.createNestedObject();
+  // create nestsed object: {"data":[{"node":"0xA2"
+  //JsonArray data = doc["data"].to<JsonArray>();
+  //JsonObject doc1 = data.createNestedObject();
+ 
+  // create an object
+ // JsonObject object = doc.to<JsonObject>();
+  JsonObject doc1 = doc.to<JsonObject>();
+
   doc1["node"] = nodeAddress;
   doc1["msg_num"] = msgCounter;
   doc1["temperature"] = Temperature;
@@ -384,11 +402,9 @@ void sendReadings() {
 
   doc1["sensor_value"] = sensorValue;
   if (sensorState == LOW && sensorValue == 0) {
-    doc1["sensor_state"] = "error";
+    doc1["sensor_state"] = "false";
   }
-  else if (sensorState == LOW) {
-    doc1["sensor_state"] = "true";
-  } else {
+  else {
     doc1["sensor_state"] = "true";
   }
 
@@ -402,7 +418,6 @@ void sendReadings() {
   // Encrypt
   byte enc_iv[BLOCK_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; // iv_block gets written to, provide own fresh copy...
   String encrypted = encrypt_impl(jsonSerial, enc_iv);
-
 
   // send ERROR message wenn Packet > 256
   if(encrypted.length() > 240) {
@@ -419,8 +434,6 @@ void sendReadings() {
 
   Serial.print("Ciphertext: "); Serial.println(encrypted);
   Serial.print("Ciphertext length: "); Serial.println(encrypted.length());
-
-
 
   //Send LoRa packet to receiver
   Serial.println("LoRa, begin to send packet to Gateway");
@@ -443,7 +456,8 @@ void sendReadings() {
 
 
 // prepare for sleep
-void do_ready_for_sleep() {
+void do_ready_for_sleep()
+{
   display.dim(true);
   display.clearDisplay();
   LoRa.sleep();
@@ -454,7 +468,8 @@ void do_ready_for_sleep() {
 
 
 //function for fetching All readings at once
-void getReadings() {
+void getReadings()
+{
   getDHTreadings();
   if ( enableBMP == true ) {
     getBMPreadings();
@@ -466,16 +481,21 @@ void getReadings() {
   else {
     getSensorUSValue();   // as analog IO
   }
+  getVbat();
+  if (sleepMode > 0) {
+    digitalWrite(pwrPin, LOW);    // disable Power US 
+  } 
 }
 
 
 
 
-void loop() {
+void loop()
+{
 
   Serial.println("----------------------------------------------------------------------");
+
   getReadings();
-  getVbat();
   sendReadings();
 
   // sleep to hold messages on display

@@ -3,26 +3,11 @@
 #include "AESLib.h"
 AESLib aesLib;
 
-#define BLOCK_SIZE 16
-
 #define BUFFER_LIMIT 300
 char cleartext[BUFFER_LIMIT] = {0};    // THIS IS BUFFER (FOR TEXT)
 char ciphertext[2*BUFFER_LIMIT] = {0}; // THIS IS BUFFER (FOR BASE64-ENCODED ENCRYPTED DATA)
 
-
 unsigned long loopcount = 0;
-
-
-
-// KEY: NIjSqCYwgXxdnXBA, https://onlinetools.com/utf8/convert-utf8-to-bytes
-
-// AES Encryption Key
-byte PROGMEM aes_key[] = { 0x4e, 0x49, 0x6a, 0x53, 0x71, 0x43, 0x59, 0x77, 0x67, 0x58, 0x78, 0x64, 0x6e, 0x58, 0x42, 0x41 };
-
-// General initialization vector (you must use your own IV's in production for full security!!!)
-byte PROGMEM aes_iv[BLOCK_SIZE] = { 0x79, 0x31, 0x44, 0x56, 0x63, 0x49, 0x72, 0x33, 0x6a, 0x65, 0x70, 0x71, 0x59, 0x42, 0x33, 0x39 };
-
-//const PROGMEM dataType variableName[] = {}
 
 
 /* non-blocking wait function */

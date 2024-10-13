@@ -20,11 +20,12 @@ bool sensorState = LOW;
 int sensorValue = 4095;
 
 // Ultaschall-Sensor
-const int Trigger_AusgangsPin = 0;
-const int Echo_EingangsPin = 4;
+const int Echo_EingangsPin = 2;
+const int Trigger_AusgangsPin = 4;
+
 
 // Benoetigte Variablen werden definiert
-int maximumRange = 40;
+int maximumRange = 100;
 int minimumRange = 2;
 long Abstand;
 long Dauer;
@@ -48,6 +49,7 @@ void getSensorUSValue() {
 
   // Nun wird der Abstand mittels der aufgenommenen Zeit berechnet
   Abstand = Dauer/58.2;
+  Serial.println(Abstand);
   // Überprüfung ob gemessener Wert innerhalb der zulässingen Entfernung liegt
   if (Abstand >= maximumRange || Abstand <= minimumRange) {
     // Falls nicht wird eine Fehlermeldung ausgegeben.
@@ -63,7 +65,7 @@ void getSensorUSValue() {
   sensorValue = Abstand;
   Serial.print("US-Sensor, Analog IO - Sensor value: ");
   Serial.print(sensorValue);
-  if ( sensorValue > 6 and sensorValue < 30) {
+  if ( sensorValue > 1 and sensorValue < 8) {
     sensorState = HIGH;
     Serial.print(" - Sensor state: ");
   } 

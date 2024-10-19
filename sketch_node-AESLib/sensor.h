@@ -49,31 +49,26 @@ void getSensorUSValue() {
 
   // Nun wird der Abstand mittels der aufgenommenen Zeit berechnet
   Abstand = Dauer/58.2;
-  Serial.println(Abstand);
+  debugOutput("US-Sensor, Abstand: " +String(Abstand), 5);
   // Überprüfung ob gemessener Wert innerhalb der zulässingen Entfernung liegt
   if (Abstand >= maximumRange || Abstand <= minimumRange) {
     // Falls nicht wird eine Fehlermeldung ausgegeben.
-    Serial.println("US-Sensor, Abstand ausserhalb des Messbereichs");
+    debugOutput("US-Sensor, Abstand ausserhalb des Messbereichs", 2);
   }
   else {
     // Der berechnete Abstand wird in der seriellen Ausgabe ausgegeben
-    Serial.print("US-Sensor, Der Abstand betraegt: ");
-    Serial.print(Abstand);
-    Serial.println(" cm");
+    debugOutput("US-Sensor, Der Abstand betraegt: " +String(Abstand)+ " cm", 5);
   }
 
   sensorValue = Abstand;
-  Serial.print("US-Sensor, Analog IO - Sensor value: ");
-  Serial.print(sensorValue);
   if ( sensorValue > 1 and sensorValue < 8) {
     sensorState = HIGH;
-    Serial.print(" - Sensor state: ");
+    debugOutput("US-Sensor, Analog IO - Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } 
   else {
     sensorState = LOW;
-    Serial.print(" - Sensor state: ");
+    debugOutput("US-Sensor, Analog IO - Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   }
-  Serial.println(sensorState);
 
 }
 
@@ -87,16 +82,13 @@ const int sensorPin = 15;    // 10K PULLDOWN
 // digital IO of a button "on=nicht belegt, off=belegt"
 void getButtonState() {
   sensorValue = digitalRead(sensorPin);
-  Serial.print("Digital IO, Sensor value: ");
-  Serial.print(sensorValue);
   // check if the pushbutton is pressed, if it is, the buttonState is HIGH
   if (sensorValue == HIGH) {
     sensorState = HIGH;
-    Serial.print(" - Sensor state: ");
+    debugOutput("Digital IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } else {
     sensorState = LOW;
-    Serial.print(" - Sensor state: ");
+    debugOutput("Digital IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
   }
-  Serial.println(sensorState);
 }
 

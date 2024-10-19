@@ -58,15 +58,14 @@ PINs,
 //#include "config-node-a1.h"
 #include "config-node-a2.h"
 
-
 // Sensitive configs
 #include "secrets.h"   
 
 // 
 #include "config.h" 
-#include "sensor.h"
+#include "log.h"
 #include "init.h"
-
+#include "sensor.h"
 
 //https://github.com/adafruit/Adafruit_SleepyDog/tree/master
 #include <Adafruit_SleepyDog.h>
@@ -84,7 +83,6 @@ PINs,
  others = Mode 2 'sleep'
  both LOW = Disabled as 'wait_for'
 **/
-//const int sleepModePin1 = 36; 
 const int sleepModePin1 = 13;  
 const int sleepModePin2 = 39;   //2
 // variable for store the sleepmode
@@ -101,6 +99,9 @@ const int pwrPin =  14;  // Power Sensor
 const uint8_t vbatPin = 35; 
 // battery voltage from ESP32 ADC read
 float VBAT;
+
+
+
 
 // Send LoRa packets
 const int ledPin =  25;
@@ -158,7 +159,11 @@ void setup()
 {
   //initialize Serial Monitor
   Serial.begin(BAUD);
-  Serial.println("***LoRa Node - Version " +String(VERSION));
+
+  // Init Logger
+  isDebugEnabled();
+
+  debugOutput("***LoRa Node - Version " +String(VERSION), 5);
 
   // Battery Pin as an analog input 
   pinMode(vbatPin, INPUT);
@@ -196,7 +201,7 @@ void setup()
 
   //Increments boot number and prints it every reboot
   bootCount++;
-  Serial.println("Boot number: " + String(bootCount));
+  debugOutput("Boot number: " + String(bootCount), 5);
 
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
@@ -238,24 +243,20 @@ void getDHTreadings()
   sensors_event_t event;
   dht.temperature().getEvent(&event);
   if (isnan(event.temperature)) {
-    Serial.println(F("*Error reading temperature!"));
+    debugOutput("*Error reading temperature!", 3);
   }
   else {
-    Serial.print(F("Temperature: "));
-    Temperature=event.temperature;
-    Serial.print(Temperature);
-    Serial.println(F("°C"));
+    Temperature = event.temperature;
+    debugOutput("Temperature: " +String(Temperature)+ "°C", 4);
   }
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
   if (isnan(event.relative_humidity)) {
-    Serial.println(F("*Error reading humidity!"));
+    debugOutput("*Error reading humidity!", 3);
   }
   else {
-    Serial.print(F("Humidity: "));
     Humidity = event.relative_humidity;
-    Serial.print(event.relative_humidity);
-    Serial.println(F("%"));
+    debugOutput("Humidity: " +String(Humidity)+ "%", 4);
   }
 }
 
@@ -263,18 +264,16 @@ void getDHTreadings()
 //function for fetching BMP280 readings
 void getBMPreadings()
 {
-  Pressure = bmp.readPressure()/100;
   //float SLP = bmp.seaLevelForAltitude(SEALEVELPRESSURE_HPA, Pressure);
   //float LLP = bmp.readAltitude(SLP);  //SEALEVELPRESSURE_HPA
   //Pressure = LLP;
-  Serial.print(F("Pressure: "));
-  Serial.print(Pressure);
-  Serial.println(F(" hPa"));
+  Pressure = bmp.readPressure()/100;
+  debugOutput("Pressure: " +String(Pressure)+ " hPa", 4);
+
   Temperature = bmp.readTemperature();
-  Serial.print(F("Temperature = "));
-  Serial.print(bmp.readTemperature());
-  Serial.println(F(" *C"));
+  debugOutput("Temperature: " +String(Temperature)+ " *C", 4);
 }
+
 
 
 void getSleepModeState()
@@ -285,29 +284,32 @@ void getSleepModeState()
   sleepModeValue1 = digitalRead(sleepModePin1);
   sleepModeValue2 = digitalRead(sleepModePin2);
 
-  Serial.print(F("Sleep PIN: "));
-  Serial.print(sleepModePin1);
-  Serial.print(F(" - Value: "));
-  Serial.print(sleepModeValue1);
-  Serial.print(F(" :: Sleep PIN: "));
-  Serial.print(sleepModePin2);
-  Serial.print(F(" - Value: "));
-  Serial.print(sleepModeValue2);
-  Serial.print(F(" ==> Sleep: "));
+/**
+    Serial.print(F("Sleep PIN: "));
+    Serial.print(sleepModePin1);
+    Serial.print(F(" - Value: "));
+    Serial.print(sleepModeValue1);
+    Serial.print(F(" :: Sleep PIN: "));
+    Serial.print(sleepModePin2);
+    Serial.print(F(" - Value: "));
+    Serial.print(sleepModeValue2);
+    Serial.print(F(" ==> Sleep: "));
+   **/ 
+  debugOutput("Sleep PIN: " +String(sleepModePin1)+ " - Value: " +String(sleepModeValue1), 5);
+  debugOutput("Sleep PIN: " +String(sleepModePin2)+ " - Value: " +String(sleepModeValue2), 5);
 
   if (sleepModeValue1 == HIGH and sleepModeValue2 == HIGH ) {
     sleepMode = 1;
-    Serial.print(F("enabled"));
+    debugOutput("Sleep enabled, Mode " +String(sleepMode), 5);
   } 
   else if (sleepModeValue1 == LOW and sleepModeValue2 == LOW) {
     sleepMode = 0;
-    Serial.print(F("disabled"));
-  } 
-  else { 
-    sleepMode = 2;
-    Serial.print(F("enabled"));
-  }
-  Serial.printf(" - Mode: %i\n", sleepMode); 
+     debugOutput("Sleep disabled ", 5);
+    } 
+    else { 
+      sleepMode = 2;
+      debugOutput("Sleep enabled, Mode " +String(sleepMode), 5);
+    }
 
 }
 
@@ -320,12 +322,12 @@ void print_wakeup_reason()
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
-    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println(F("Wakeup caused by external signal using RTC_IO")); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println(F("Wakeup caused by external signal using RTC_CNTL")); break;
-    case ESP_SLEEP_WAKEUP_TIMER : Serial.println(F("Wakeup caused by timer")); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println(F("Wakeup caused by touchpad")); break;
-    case ESP_SLEEP_WAKEUP_ULP : Serial.println(F("Wakeup caused by ULP program")); break;
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+    case ESP_SLEEP_WAKEUP_EXT0 : debugOutput("Wakeup caused by external signal using RTC_IO", 5); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : debugOutput("Wakeup caused by external signal using RTC_CNTL", 5); break;
+    case ESP_SLEEP_WAKEUP_TIMER : debugOutput("Wakeup caused by timer", 5); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : debugOutput("Wakeup caused by touchpad", 5); break;
+    case ESP_SLEEP_WAKEUP_ULP : debugOutput("Wakeup caused by ULP program", 5); break;
+    default : debugOutput("Wakeup was not caused by deep sleep: " +String(wakeup_reason), 5); break;
   }
 }
 
@@ -370,7 +372,7 @@ void getVbat()
   then double it (note above that Adafruit halves the voltage), then multiply that by the reference voltage of the ESP32 which 
   is 3.3V and then vinally, multiply that again by the ADC Reference Voltage of 1100mV.
   */
-  Serial.printf("Battery: %.2f Volts\n", VBAT); 
+  debugOutput("Battery: " +String(VBAT)+ " Volts", 5); 
 }
 
 
@@ -412,7 +414,7 @@ void sendReadings()
 
   // serialize
   serializeJson(doc, jsonSerial);
-  Serial.print("Jsontext: "); Serial.println(jsonSerial);
+  debugOutput("Jsontext: " +String(jsonSerial), 5);
 
   // Encrypt
   byte enc_iv[BLOCK_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; // iv_block gets written to, provide own fresh copy...
@@ -420,7 +422,7 @@ void sendReadings()
 
   // send ERROR message wenn Packet > 256
   if(encrypted.length() > 240) {
-    Serial.println("ERROR: LoRa Packet to big");
+    debugOutput("LoRa Packet to big", 2);
     JsonDocument doc;
     char jsonSerial[230];
     JsonArray data = doc["data"].to<JsonArray>();
@@ -431,11 +433,11 @@ void sendReadings()
     serializeJson(doc, encrypted);
   }
 
-  Serial.print("Ciphertext: "); Serial.println(encrypted);
-  Serial.print("Ciphertext length: "); Serial.println(encrypted.length());
+  debugOutput("Ciphertext: " +String(encrypted), 5);
+  debugOutput("Ciphertext: " +String(encrypted.length()), 5);
 
   //Send LoRa packet to receiver
-  Serial.println("LoRa, begin to send packet to Gateway");
+  debugOutput("LoRa, begin to send packet to Gateway", 4);
   digitalWrite(ledPin, HIGH); 
   LoRa.beginPacket();
   LoRa.write(destination);              // add destination address
@@ -447,7 +449,7 @@ void sendReadings()
   //LoRa.endPacket(true); // true = async / non-blocking mode
   digitalWrite(ledPin, LOW); 
 
-  Serial.printf("LoRa, send packet done: %d\n", msgCounter);
+  debugOutput("LoRa, send packet done, message number: " +String(msgCounter), 4);
 
   displayReadings();
 
@@ -492,7 +494,7 @@ void getReadings()
 void loop()
 {
 
-  Serial.println("----------------------------------------------------------------------");
+  debugOutput("---", 4);
 
   getReadings();
   sendReadings();
@@ -511,7 +513,7 @@ void loop()
     Wenn Sensor mit Power dann switch-off sensor = ~2mA
     **/
   if (sleepMode == 1) {
-    Serial.printf("Go into deep sleep mode for %i seconds\n", DEEP_SLEEP);
+    debugOutput("Go into deep sleep mode for " +String(DEEP_SLEEP)+ " seconds", 4);
     display.clearDisplay();
     print_sleep_info();
     delay(1 * mS_TO_S_FACTOR); 
@@ -520,7 +522,7 @@ void loop()
     esp_deep_sleep_start();
   } 
   else if (sleepMode == 2) {
-    Serial.printf("Go into sleep mode for %i seconds\n", SLEEP);
+    debugOutput("Go into deep sleep mode for " +String(SLEEP)+ " seconds", 4);
     display.clearDisplay();
     print_sleep_info();;
     delay(1 * mS_TO_S_FACTOR); 

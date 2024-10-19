@@ -12,16 +12,16 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziier
 
 //Initialize OLED Module
 void initOLED() {
-  Serial.println("Initializing OLED Display");
+  debugOutput("Initializing OLED Display", 5);
   
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3C for 128x32
-    Serial.println(F("*SSD1306 allocation failed"));
+    debugOutput("*SSD1306 allocation failed", 2);
     for (;;)
       ; // Don't proceed, loop forever
   }
 
-  Serial.println(" OLED Display OK!");
+  debugOutput(" OLED Display OK!" ,5);
   display.clearDisplay();
   display.display(); // zeigt den Grafikpuffer auf dem OLED-Display
   display.setTextColor(WHITE);
@@ -40,7 +40,7 @@ void initOLED() {
 
 //Initialize LoRa Module
 void initLoRa() {
-  Serial.println("Initializing LoRa Node");
+  debugOutput("Initializing LoRa Node", 5);
   //SPI LoRa pins
   SPI.begin(SCK, MISO, MOSI, SS);
   //setup LoRa transceiver module
@@ -48,13 +48,13 @@ void initLoRa() {
 
   LoRa.setSpreadingFactor(loRaSpreadingFactor);
   if (!LoRa.begin(BAND)) {
-    Serial.println("Starting LoRa failed!");
+    debugOutput("Starting LoRa failed!", 2);
     while (1);
   }
 
   //LoRa.dumpRegisters(Serial);
   LoRa.enableCrc();
-  Serial.println(" LoRa Initializing OK!");
+  debugOutput(" LoRa Initializing OK!", 5);
   display.setCursor(0,30);
   display.print("LoRa Initializing OK!");
   display.display();
@@ -74,9 +74,9 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 //Initialize DHT Sensor
 void initDHT() {
   // Initialize DHT device.
-  Serial.println(F("Initializing DHT Sensor"));
+  debugOutput("Initializing DHT Sensor", 5);
   dht.begin();
-  Serial.println(F(" DHT Sensor is OK!"));
+  debugOutput(" DHT Sensor is OK!", 5);
 }
 
 
@@ -96,13 +96,13 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 
 //Initialize BMP280 Sensor
 void initBMP() {
-  Serial.println(F("Initializing BMP280 Sensor"));
+  debugOutput("Initializing BMP280 Sensor", 5);
   if (!bmp.begin()) {  
-    Serial.println(" Could not find a valid BMP280 !");
+    debugOutput(" Could not find a valid BMP280 !", 2);
     while (1);
   }
   else {
-    Serial.println(F(" BMP280 is OK!"));
+    debugOutput(" BMP280 is OK!", 5);
   }
   bmp.takeForcedMeasurement();
 
@@ -116,3 +116,4 @@ void initBMP() {
   //startAltitude = bmp.readAltitude(1013.25);
 
 }
+

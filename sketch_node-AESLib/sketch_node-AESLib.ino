@@ -23,11 +23,11 @@ External Components
 PINs, 
   0   Boot
   2   LOW=Chip in download mode.
-      Sensor Trogger
+      Sensor Trigger
   4   Sensor US Echo
   5   LoRa SCK
-  12  ??
-  13  Sleep PIN digital
+  12  ?? darf nigh HIGH sein sonst (RTCWDT_RTC_RESET)
+  13  Sleep PIN digital => PULLUP 10K
   14  LED Pin / MOS-FET to enabled Power for Sensors
   15  DHT Sensor
   18  LoRa CS / SS
@@ -40,9 +40,10 @@ PINs,
   27  LoRa MOSI
   34  Wakeup digital
   35  interval VBAT analog
-  36  
-  39  Sleep PIN digital
-
+  36  Sleep PIN digital => PULLUP 10K
+  39  Debug => Default LOW, ON = 10K to VCC 
+ 
+ 
   LED
   - red     VBUS
   - blue    Battery
@@ -84,7 +85,7 @@ PINs,
  both LOW = Disabled as 'wait_for'
 **/
 const int sleepModePin1 = 13;  
-const int sleepModePin2 = 39;   //2
+const int sleepModePin2 = 36; //12; //39;   //2
 // variable for store the sleepmode
 int sleepMode = 1;   // 0=no sleep, 1=deep, 2=short
 int wait_for = 15;   // every n seconds
@@ -95,13 +96,11 @@ const int pwrPin =  14;  // Power Sensor
 //const char* wakeUpPin = GPIO_NUM_34;
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
 
+
+// battery voltage from ESP32 ADC read
 // analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
-// battery voltage from ESP32 ADC read
 float VBAT;
-
-
-
 
 // Send LoRa packets
 const int ledPin =  25;
@@ -168,8 +167,9 @@ void setup()
   // Battery Pin as an analog input 
   pinMode(vbatPin, INPUT);
  
-  // initialize Sleep Pin as an analog input
+  // initialize Sleep Pin, digital input
   pinMode(sleepModePin1, INPUT);
+  pinMode(sleepModePin2, INPUT);
 
   // initialize the sensor 
   if ( enableButton == true ) {
@@ -284,17 +284,6 @@ void getSleepModeState()
   sleepModeValue1 = digitalRead(sleepModePin1);
   sleepModeValue2 = digitalRead(sleepModePin2);
 
-/**
-    Serial.print(F("Sleep PIN: "));
-    Serial.print(sleepModePin1);
-    Serial.print(F(" - Value: "));
-    Serial.print(sleepModeValue1);
-    Serial.print(F(" :: Sleep PIN: "));
-    Serial.print(sleepModePin2);
-    Serial.print(F(" - Value: "));
-    Serial.print(sleepModeValue2);
-    Serial.print(F(" ==> Sleep: "));
-   **/ 
   debugOutput("Sleep PIN: " +String(sleepModePin1)+ " - Value: " +String(sleepModeValue1), 5);
   debugOutput("Sleep PIN: " +String(sleepModePin2)+ " - Value: " +String(sleepModeValue2), 5);
 

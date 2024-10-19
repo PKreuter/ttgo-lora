@@ -8,11 +8,11 @@
 **/
 
 // 
-int MIN_LOG_LEVEL = 4;        // 4 = INFO
+int MIN_LOG_LEVEL = 5;        // 4 = INFO
 
 
 // debug   
-const uint8_t debugPin = 36; 
+const uint8_t debugPin = 39; 
 bool debugMode = LOW;
 
 

@@ -5,6 +5,7 @@ This is LoRa Receiver / Gateway Node
 
 Feaures
 - OLED SSD1306 I2C Address 0x3C
+- LoRa, receive AES encypted packets
 - WebServer
 - Time base is UTC
 - Receive LoRa Message and forward to MQTT Server
@@ -489,7 +490,6 @@ void getLoRaData()
       Serial.printf(" Received Encrypted Data: \n");
       Serial.print("  Ciphertext: "); Serial.println(loraData);
       Serial.print("  Ciphertext length: "); Serial.println(loraData.length());
-      Serial.println(loraData.length());
 
       sprintf(ciphertext, "%s", loraData.c_str());
       byte dec_iv[N_BLOCK] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -497,9 +497,11 @@ void getLoRaData()
 
       //Serial.println(ciphertext);
       Serial.println(decrypted);
-      //JsonDocument doc;
-      deserializeJson(doc, decrypted);
-      json_val = doc["data"];
+
+      JsonDocument doc2;
+      deserializeJson(doc2, decrypted);
+      json_val = doc2;
+
       loraHasData = true;
     }
 
@@ -516,10 +518,10 @@ void blinkts(int blinkLEDInterval)
     previousLEDmillis = timeNow;                          // save it as new time (interval reset)
     if (stateLED == LOW)  {                               // check if LED is LOW
       stateLED = HIGH;                                    // then set it HIGH for the next loop
-      oledWriteMsg(80,displayRow1, "*");                  // Print "ON" at Serial console
+      oledWriteMsg(100,displayRow1, "*");                  // Print "ON" at Serial console
     } else  {      
       stateLED = LOW;                                     // in case LED is HIGH make LED LOW
-      oledWriteMsg(80,displayRow1, " ");                  // Print "OFF" at Serial console
+      oledWriteMsg(100,displayRow1, " ");                  // Print "OFF" at Serial console
     }
   }
 }
@@ -544,19 +546,21 @@ void loop()
 
       timeClient.update();
       long ts = timeClient.getEpochTime();
-      String ts_string = timeClient.getFormattedTime();
-      //Serial.printf("Time:  %i - %s\n", ts, ts_string);
+      String formattedDate = timeClient.getFormattedTime();
+      Serial.print("TS: ");
       Serial.print(ts);
       Serial.print(F(" - "));
-      Serial.println(ts_string); 
+      Serial.println(formattedDate); 
       // Serial.println(timeClient.getFormattedTime());              
 
-      // add fields from gateway and node-data as json-evelope
+      // add fields from gateway
       doc["ts"] = ts;
-      doc["ts_string"] = ts_string;
+      doc["ts_string"] = formattedDate;
       doc["lora_rssi"] = String(LoRa.packetRssi());
       doc["lora_snr"] = String(LoRa.packetSnr());
+      // add data from LoRa
       doc["data"] = json_val;
+
       serializeJson(doc, jsonSerial);
 
       loraRecvFrom = "/" + loraRecvFrom;

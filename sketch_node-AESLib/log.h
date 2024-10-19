@@ -10,12 +10,11 @@
 // 
 int MIN_LOG_LEVEL = 5;        // 4 = INFO
 
-
 // debug   
 const uint8_t debugPin = 39; 
 bool debugMode = LOW;
 
-
+// Mapping
 String LOG_LEVEL_NAMES[] = {"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE", "ALL"};
 
 // is logger enabled

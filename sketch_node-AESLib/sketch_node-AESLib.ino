@@ -16,7 +16,7 @@ RULES
 
 External Components
 - JOY-IT SEN-US01
-- JOY_IT BMP280
+- JOY_IT BMP280 (not used)
 - DHT22
 
 
@@ -42,7 +42,12 @@ PINs,
   35  interval VBAT analog
   36  Sleep PIN digital => PULLUP 10K
   39  Debug => Default LOW, ON = 10K to VCC 
- 
+
+
+  Wenn VBAT dauernd 7.27 V anzeigt siimmt was mit den Widerstand nicht
+  PIN: 13, 36 via 10K to VCC
+
+
  
   LED
   - red     VBUS

@@ -47,7 +47,7 @@ PINs,
   Wenn VBAT dauernd 7.27 V anzeigt siimmt was mit den Widerstand nicht
   PIN: 13, 36 via 10K to VCC
 
-
+  
  
   LED
   - red     VBUS
@@ -61,8 +61,8 @@ PINs,
 
 */ 
 
-//#include "config-node-a1.h"
-#include "config-node-a2.h"
+#include "config-node-a1.h"
+//#include "config-node-a2.h"
 
 // Sensitive configs
 #include "secrets.h"   
@@ -173,12 +173,12 @@ void setup()
   pinMode(vbatPin, INPUT);
  
   // initialize Sleep Pin, digital input
-  pinMode(sleepModePin1, INPUT);
-  pinMode(sleepModePin2, INPUT);
+  pinMode(sleepModePin1, INPUT_PULLUP);
+  pinMode(sleepModePin2, INPUT_PULLUP);
 
   // initialize the sensor 
   if ( enableButton == true ) {
-    pinMode(sensorPin, INPUT);
+    pinMode(sensorPin, INPUT_PULLDOWN);
   }
   else {
     initSensorUS();

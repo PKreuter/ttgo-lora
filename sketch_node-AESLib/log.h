@@ -17,14 +17,6 @@ bool debugMode = LOW;
 // Mapping
 String LOG_LEVEL_NAMES[] = {"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE", "ALL"};
 
-// is logger enabled
-void isDebugEnabled() {
-  pinMode(debugPin, INPUT);
-  if( digitalRead(debugPin) == LOW) {
-    MIN_LOG_LEVEL = 0;
-  }
-}
-
 
 //
 void debugOutput(String text, int logLevel) {
@@ -32,4 +24,18 @@ void debugOutput(String text, int logLevel) {
     Serial.println("["+LOG_LEVEL_NAMES[logLevel]+ "] " + text);
   }
 }
+
+
+// is logger enabled
+void isDebugEnabled() {
+  pinMode(debugPin, INPUT_PULLDOWN);
+  debugMode = digitalRead(debugPin);
+  if( digitalRead(debugPin) == LOW) {
+    MIN_LOG_LEVEL = 0;
+  }
+  debugOutput("Debug mode: " +String(debugMode)+ " - Level: " +String(MIN_LOG_LEVEL), 4);
+}
+
+
+
 

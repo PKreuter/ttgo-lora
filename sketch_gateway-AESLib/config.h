@@ -9,7 +9,7 @@ PROGMEM const char* NAME = "Gateway";
 PROGMEM const byte localAddress = 0xAA;           
 
 // Speed Serial Monitor
-//#define BAUD 115200
+#define BAUD 115200
 
 // setting for MQTT liveness message 
 //PROGMEM const long intervalMillis = 10000;  // TEST, interval for liveness

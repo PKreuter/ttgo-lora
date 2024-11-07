@@ -35,8 +35,7 @@ String decrypt_impl(char * msg, byte iv[]) {
 
 // Generate IV (once)
 void aes_init() {
-  Serial.println("gen_iv()");
+  debugOutput("AES Init", 5);
   aesLib.gen_iv(aes_iv);
-  Serial.println("encrypt_impl()");
 }
 

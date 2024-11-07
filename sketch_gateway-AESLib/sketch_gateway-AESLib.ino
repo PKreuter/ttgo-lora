@@ -23,7 +23,9 @@ Feaures
 
 // Sensitive configs
 #include "secrets.h"   
+
 #include "config.h"
+#include "log.h"
 
 #include "mqtt.h"
 
@@ -126,16 +128,18 @@ void showVersion()
 
 void setup()
 {
-  Serial.begin(115200);
-  Serial.println("***LoRa Receiver " +String(VERSION));
+  Serial.begin(BAUD);
+
+  // Init Logger
+  isDebugEnabled();
+
+  debugOutput("***LoRa Receiver - Version " +String(VERSION), 5);
 
   // watchdog, used when WiFi not comes up
   Watchdog.disable();
   Watchdog.reset(); // muss, sonst beleibt haengen
   int countdownMS = Watchdog.enable(60 * 1000);
-  Serial.print(F("Enable Watchdog with max countdown of "));
-  Serial.print(countdownMS, DEC);
-  Serial.println(F(" milliseconds!"));
+  debugOutput("Enable Watchdog with max countdown of " +String(countdownMS, DEC)+ " milliseconds", 5);
 
   initOLED();
   showVersion();
@@ -169,7 +173,7 @@ void setup()
   connectToMqtt();
 
   Watchdog.disable();
-  Serial.println(F("All seems Connected, disable Watchdog"));
+  debugOutput("All seems Connected, disable Watchdog", 5);
 
   // AES
   aes_init();
@@ -221,22 +225,14 @@ void notFound(AsyncWebServerRequest *request) {
 // Initialize OLED Module
 void initOLED()
 {
-  Serial.println(F("Initializing OLED Display"));
+  debugOutput("Initializing OLED Display", 5);
   //reset OLED display via software
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3C for 128x32
-    Serial.println(F("SSD1306 allocation failed"));
+    debugOutput("*SSD1306 allocation failed", 2);
     for (;;)
       ; // Don't proceed, loop forever
   }
   display.clearDisplay();
-  /**
-  display.display(); // zeigt den Grafikpuffer auf dem OLED-Display
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setCursor(0,20);
-  display.print("OLED Display OK!");
-  display.display();
-  **/
   oledWriteMsg(0,displayRow3, "OLED Display OK");
 
   Watchdog.reset(); 
@@ -252,7 +248,7 @@ void initLoRA()
   LoRa.setPins(SS, RST, DIO0);
 
   while (!LoRa.begin(BAND) && counter < 10) {
-    Serial.print(".");
+    Serial.print(F("."));
     counter++;
     delay(500);
   }
@@ -262,9 +258,9 @@ void initLoRA()
   // so nicht optimal
   if (counter == 10) {
     // Increment readingID on every new reading
-    Serial.println(F("Starting LoRa failed!")); 
+    debugOutput(" LoRa Starting faild!", 2); 
   }
-  Serial.println(F("LoRa Initialization OK!"));
+  debugOutput(" LoRa Initializing OK!", 5);
 
   // display, reset line and write new message
   oledWriteMsg(0,displayRow4, "LoRa Module OK");
@@ -280,7 +276,7 @@ void initLoRA()
 
 void connectToWifi() 
 {
-  Serial.printf("Connecting to WiFi '%s' .", SECRET_WIFI_SSID);
+  debugOutput("Connecting to WiFi " +String(SECRET_WIFI_SSID), 5);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -300,7 +296,7 @@ void connectToWifi()
 
 void connectToMqtt()
 {
-  Serial.printf("\nConnecting to MQTT '%s:%i'...\n", MQTT_BROKER, MQTT_PORT);
+  debugOutput("Connecting to MQTT " +String(MQTT_BROKER)+ ":" +String(MQTT_PORT), 5);
   mqttClient.connect();
   // loop until we are connected
   while (!mqttClient.connected() ) {
@@ -309,7 +305,7 @@ void connectToMqtt()
   }
   // send online message to MQTT
   uint16_t packetIdPub = mqttClient.publish(MQTT_PUB_GW_ONLINE, 1, true, String("true").c_str());
-  Serial.printf("Publishing on topic %s, packetId %i: \n", MQTT_PUB_GW_ONLINE, packetIdPub);
+  debugOutput("Publishing on topic " +String(MQTT_PUB_GW_ONLINE)+ "PacketId " +String(packetIdPub), 5);
 }
 
 
@@ -318,18 +314,18 @@ void connectToMqtt()
 
 void WiFiEvent(WiFiEvent_t event)
 {
-  Serial.printf("[WiFi-event] event: %d\n", event);
+  debugOutput("[WiFi-event] event: " +String(event), 5);
   switch(event) {
     //case SYSTEM_EVENT_STA_START:
     //  Serial.println("WiFi Started");
     //  break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      Serial.printf("\nWiFi connected, WiFi RSSI: %d, IP address: %s\n", WiFi.RSSI(), WiFi.localIP().toString());
+      debugOutput("Wifi connected, RSSI: " +String(WiFi.RSSI())+ ", IP address: " +String(WiFi.localIP().toString()), 4);
       //rssiWiFi = WiFi.RSSI();
       //connectToMqtt();
       break;
     case WIFI_EVENT_STA_DISCONNECTED:
-      Serial.println(F("WiFi lost connection"));
+      debugOutput("Wifi lost connection!", 3);
       xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
       xTimerStart(wifiReconnectTimer, 0);
       break;
@@ -344,14 +340,13 @@ void WiFiEvent(WiFiEvent_t event)
 
 void onMqttConnect(bool sessionPresent)
 {
-  Serial.print(F("Connected to MQTT, Session present: "));
-  Serial.println(sessionPresent);
+  debugOutput("Connected to MQTT, Session present: " +String(sessionPresent), 4);
 }
 
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 {
-  Serial.println(F("Disconnected from MQTT."));
+  debugOutput("Disconnected from MQTT!", 4);
 
   if (WiFi.isConnected()) {
     xTimerStart(mqttReconnectTimer, 0);
@@ -367,7 +362,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 
 void onMqttPublish(uint16_t packetId)
 {
-  Serial.printf(" Received acknowledged for packetId %s\n", String(packetId));
+  debugOutput(" Received acknowledged for packetId " +String(packetId), 4);
   publishMsgCount = String(packetId);
 }
 
@@ -397,7 +392,7 @@ void update_display()
 // Read LoRa packet and get JSON
 void getLoRaData()
 {
-  Serial.println(F("LoRa packet received: "));
+  debugOutput("LoRa packet received:" , 4);
   loraPacketRecv++;
 
   // read packet header bytes:
@@ -409,10 +404,10 @@ void getLoRaData()
   loraRecvFrom = String(sender, HEX);
 
   // if message is for this device, or broadcast, print details:
-  Serial.println(" Received from: 0x" + loraRecvFrom);
-  Serial.println(" Sent to: 0x" + String(recipient, HEX));
-  Serial.println(" Message ID: " + String(incomingMsgId));
-  Serial.println(" Message length: " + String(incomingLength));
+  debugOutput(" Received from: 0x" +String(loraRecvFrom), 5);
+  debugOutput(" Sent to: 0x" +String(recipient, HEX), 5);
+  debugOutput(" Message ID: " +String(incomingMsgId), 5);
+  debugOutput(" Message length: " +String(incomingLength), 5);
   //Serial.print(" RSSI: " + String(LoRa.packetRssi()));
   //Serial.println(" / Snr: " + String(LoRa.packetSnr()));
 
@@ -422,11 +417,10 @@ void getLoRaData()
 
   // if the recipient isn't for this device or broadcast,
   if (recipient != localAddress && recipient != 0xFF) {
-    Serial.print(F(" *This message is not for me. Received from "));
-    Serial.println(loraRecvFrom)
-    //String loraData = LoRa.readString();
-    //Serial.print(" Data: ");
-    //Serial.println(loraData); 
+    debugOutput(" *This message is not for me. Received from " +String(loraRecvFrom), 3);
+    String loraData = LoRa.readString();
+    Serial.print(" Data: ");
+    Serial.println(loraData); 
     
     /**
     if( true ) {
@@ -473,10 +467,8 @@ void getLoRaData()
     **/
     // Error message
     if(loraData.indexOf("ERROR") > 0) {
-      Serial.printf(" ERROR message received from Node: \n ");  // muss so sein
-      Serial.println(loraData);
+      debugOutput(" ERROR message received from Node: " +String(loraData), 3);
       JsonDocument doc; 
-      //doc["ts"] = ts;
       doc["message"] = loraData;
       doc["recipient"] = recipient;
       doc["loraRecvFrom"] = loraRecvFrom;
@@ -487,16 +479,15 @@ void getLoRaData()
     } 
     // encrypted
     else {
-      Serial.printf(" Received Encrypted Data: \n");
-      Serial.print("  Ciphertext: "); Serial.println(loraData);
-      Serial.print("  Ciphertext length: "); Serial.println(loraData.length());
+      debugOutput(" Received Encrypted Data:", 5);
+      debugOutput("  Ciphertext: " +String(loraData), 5);
+      debugOutput("  Ciphertext length: " +String(loraData.length()), 5);
 
       sprintf(ciphertext, "%s", loraData.c_str());
       byte dec_iv[N_BLOCK] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
       String decrypted = decrypt_impl(ciphertext, dec_iv);
 
-      //Serial.println(ciphertext);
-      Serial.println(decrypted);
+      debugOutput(String(decrypted), 5);
 
       JsonDocument doc2;
       deserializeJson(doc2, decrypted);
@@ -547,11 +538,7 @@ void loop()
       timeClient.update();
       long ts = timeClient.getEpochTime();
       String formattedDate = timeClient.getFormattedTime();
-      Serial.print("TS: ");
-      Serial.print(ts);
-      Serial.print(F(" - "));
-      Serial.println(formattedDate); 
-      // Serial.println(timeClient.getFormattedTime());              
+      debugOutput("TS: " +String(ts)+ " - " +String(formattedDate), 5);
 
       // add fields from gateway
       doc["ts"] = ts;
@@ -565,10 +552,8 @@ void loop()
 
       loraRecvFrom = "/" + loraRecvFrom;
       String topic = MQTT_PUB_PREFIX + loraRecvFrom + MQTT_PUB_DATA;
-      //sprintf(topic, "%s/%s%s", MQTT_PUB_PREFIX, loraRecvFrom, MQTT_PUB_DATA);
       uint16_t packetIdPub = mqttClient.publish(String(topic).c_str(), 1, true, jsonSerial);
-      Serial.printf("Publishing on topic %s, packetId: %i: Message %s\n", 
-        topic.c_str(), packetIdPub, jsonSerial);
+      debugOutput("Publishing on topic " +String(topic)+ " PacketId: " +String(packetIdPub)+ " Message: " +String(jsonSerial), 5); 
       
       loraHasData = false;
     }

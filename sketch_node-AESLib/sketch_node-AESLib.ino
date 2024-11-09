@@ -61,8 +61,8 @@ PINs,
 
 */ 
 
-#include "config-node-a1.h"
-//#include "config-node-a2.h"
+//#include "config-node-a1.h"
+#include "config-node-a2.h"
 
 // Sensitive configs
 #include "secrets.h"   

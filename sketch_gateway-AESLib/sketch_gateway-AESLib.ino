@@ -22,11 +22,10 @@ Feaures
 
 
 // Sensitive configs
-#include "secrets.h"   
-
+#include "secrets.h"  
+ 
 #include "config.h"
 #include "log.h"
-
 #include "mqtt.h"
 
 // https://github.com/adafruit/Adafruit_SleepyDog/tree/master
@@ -41,7 +40,8 @@ int countdownMS = Watchdog.enable(60 * 1000);
 // Import Wi-Fi library
 #include <WiFi.h>
 //#include <ESP8266WiFi.h>   welches ???
-//#include "ESPAsyncWebServer.h"
+
+#include "ESPAsyncWebServer.h"
 
 //Libraries for LoRa
 #include <Wire.h>
@@ -65,9 +65,6 @@ JsonDocument json_val; // contains JSON from Node
 
 // AES
 #include "aes.h"
-
-// Receive LoRa packet
-//const int ledPin =  25;
 
 
 // Create objects to handle MQTT client
@@ -134,6 +131,9 @@ void setup()
   isDebugEnabled();
 
   debugOutput("***LoRa Receiver - Version " +String(VERSION), 5);
+
+  Wire.setPins(I2C_SDA, I2C_SCL); // Set the I2C pins before begin
+  Wire.begin(); // join i2c bus (address optional for master)
 
   // watchdog, used when WiFi not comes up
   Watchdog.disable();

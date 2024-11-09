@@ -15,6 +15,11 @@ PROGMEM const byte localAddress = 0xAA;
 //PROGMEM const long intervalMillis = 10000;  // TEST, interval for liveness
 PROGMEM const long intervalMillis = 300000;  // interval for liveness
 
+#define LED_PIN 25
+
+// Wire
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 // LoRa define the pins used by the LoRa transceiver module
 #define SCK 5

@@ -19,12 +19,18 @@ External Components
 - JOY_IT BMP280 (not used)
 - DHT22
 
+Arduion IDE
+- Select Board : TTGO LoRa32-OLED
+-
+Chip is ESP32-PICO-D4 (revision v1.1)
+Features: WiFi, BT, Dual Core, 240MHz, Embedded Flash, VRef calibration in efuse, Coding Scheme None
+Crystal is 40MHz
 
 PINs, 
   0   Boot
   2   LOW=Chip in download mode.
       Sensor Trigger
-  4   Sensor US Echo
+  4   Sensor US Echo / PressButton / IR
   5   LoRa SCK
   12  ?? darf nigh HIGH sein sonst (RTCWDT_RTC_RESET)
   13  Sleep PIN digital => PULLUP 10K
@@ -100,7 +106,7 @@ const int pwrPin =  14;  // Power Sensor
 
 //const char* wakeUpPin = GPIO_NUM_34;
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
-
+//#define GPIO_NUM_34 34
 
 // battery voltage from ESP32 ADC read
 // analog IO of the VBAT   
@@ -169,6 +175,9 @@ void setup()
 
   debugOutput("***LoRa Node - Version " +String(VERSION), 5);
 
+  // Slowing down the ESP32 to 1/4 of its speed saves more energy
+	setCpuFrequencyMhz(60);
+
   // Battery Pin as an analog input 
   pinMode(vbatPin, INPUT);
  
@@ -178,6 +187,9 @@ void setup()
 
   // initialize the sensor 
   if ( enableButton == true ) {
+    pinMode(sensorPin, INPUT_PULLDOWN);
+  }
+  else if ( enableIRSensor == true ) {
     pinMode(sensorPin, INPUT_PULLDOWN);
   }
   else {
@@ -341,6 +353,7 @@ void displayReadings()
   sprintf(text, "Battery : %s Volts", String(VBAT));
   oledWriteMsg(displayRow5, text);
 
+  // common rule
   if (sensorState == LOW && sensorValue == 0) {
     sprintf(text, "Post : ERROR / %s", String(sensorValue));
     oledWriteMsg(displayRow6, text);
@@ -352,6 +365,8 @@ void displayReadings()
     sprintf(text, "Post : FALSE / %s", String(sensorValue));
     oledWriteMsg(displayRow6, text); 
   }
+
+
   sprintf(text, "LoRa send :%s", String(msgCounter));
   oledWriteMsg(displayRow7, text); 
 }
@@ -472,6 +487,9 @@ void getReadings()
   /** Sensor enable one of them **/
   if ( enableButton == true ) {
     getButtonState();     // as digital IO based on Press-Button
+  }
+  else if ( enableIRSensor == true ) {
+    getSensorIRState();   // as analog IO
   }
   else {
     getSensorUSValue();   // as analog IO

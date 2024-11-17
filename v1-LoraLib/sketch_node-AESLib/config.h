@@ -19,8 +19,9 @@ byte destination = 0xAA;
 const int SLEEP = 60;         // seconds to Sleep
 const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900
 
-
+// both false = USSensor
 bool enableButton = false;
+bool enableIRSensor = true;
 
 
 //define the pins used by the LoRa transceiver module

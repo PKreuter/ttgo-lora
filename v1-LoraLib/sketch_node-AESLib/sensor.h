@@ -20,8 +20,11 @@ bool sensorState = LOW;
 int sensorValue = 4095;
 
 // Ultaschall-Sensor
-const int Echo_EingangsPin = 2;
-const int Trigger_AusgangsPin = 4;
+const int Echo_EingangsPin = 2;                // Pos 4 / bn
+const int Trigger_AusgangsPin = 4;             // Pos 2 / ws/bn
+
+// PressButton and IR Sensor PIN
+const int sensorPin = 4;    // 10K PULLDOWN
 
 
 // Benoetigte Variablen werden definiert
@@ -74,10 +77,7 @@ void getSensorUSValue() {
 
 
 
-
-
 // Case Press-Button
-const int sensorPin = 15;    // 10K PULLDOWN
 
 // digital IO of a button "on=nicht belegt, off=belegt"
 void getButtonState() {
@@ -89,6 +89,47 @@ void getButtonState() {
   } else {
     sensorState = LOW;
     debugOutput("Digital IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
+  }
+}
+
+// Case IR Sensor
+/**
+When something passes between the two, and it’s not transparent to IR, then
+the“beam is broken“and the receiver will output a signal.
+**/
+
+int a,b,c;
+
+// digital IO of a button "on=nicht belegt, off=belegt"
+void getSensorIRState() {
+ 
+  delayMicroseconds(500);  //wait
+  a = analogRead(sensorPin);
+  debugOutput("Analog noise+signal: " +String(a),5);
+
+  delayMicroseconds(500);  //wait
+  b = analogRead(sensorPin);
+  debugOutput("Analog noise: " +String(b),5);
+
+  delayMicroseconds(500);  //wait
+  c = analogRead(sensorPin);
+  debugOutput("Analog noise: " +String(b),5);
+
+/
+  debugOutput("difference:[ (noise+signal)-(noise)] just signal: " +String(a-b),5);
+
+  int x = (a+b+c)/3;
+  debugOutput("New Value :" +String(x),4);
+
+ 
+  sensorValue = (a+b+c)/3;  
+
+  if (sensorValue < 2000) {
+    sensorState = HIGH;
+    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
+  } else {
+    sensorState = LOW;
+    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
   }
 }
 

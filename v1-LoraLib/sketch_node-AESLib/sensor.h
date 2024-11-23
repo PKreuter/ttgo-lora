@@ -92,39 +92,56 @@ void getButtonState() {
   }
 }
 
+
+
+
+
+
+
 // Case IR Sensor
 /**
-When something passes between the two, and it’s not transparent to IR, then
-the“beam is broken“and the receiver will output a signal.
+  Sharp Infrarot Distanzsensor 2Y0A21
+  Messbereich: 10 - 80cm
+  Versorgungsspannung: 4.5 - 5.5V
+  Betriebstrom: ca. 30mA
+  Analoger Ausgang: Nicht linear zur Entfernung
+  Zeit pro Messung: 38.3ms ± 9.6ms
 **/
+float average (int * array, int len)  // assuming array is int.
+{
+  long sum = 0L ;  // sum will be larger than an item, long for safety.
+  for (int i = 0 ; i < len ; i++) {
+    sum += array [i] ;
+  }
+  Serial.print("sum: ");
+  Serial.print(sum);
+  Serial.print(", len: ");
+  Serial.print(len);
+  Serial.print(", avg as int: ");
+  Serial.println( ((int) sum) / len);
+  return  ((float) sum) / len ;  // average will be fractional, so float may be appropriate.
+}
 
-int a,b,c;
 
 // digital IO of a button "on=nicht belegt, off=belegt"
 void getSensorIRState() {
+
+  int AnalogWert;
+  int anz = 10;
+  int data[10];
+  
+  //delay(5000);
+
+  for (byte i = 0; i < anz; i = i + 1) {
+    AnalogWert=analogRead(sensorPin);
+    data[i] = AnalogWert;  
+    //Serial.println(AnalogWert);
+  }
+
+  Serial.println(average(data, anz));
+  sensorValue=(average(data, anz));
  
-  delayMicroseconds(500);  //wait
-  a = analogRead(sensorPin);
-  debugOutput("Analog noise+signal: " +String(a),5);
-
-  delayMicroseconds(500);  //wait
-  b = analogRead(sensorPin);
-  debugOutput("Analog noise: " +String(b),5);
-
-  delayMicroseconds(500);  //wait
-  c = analogRead(sensorPin);
-  debugOutput("Analog noise: " +String(b),5);
-
-/
-  debugOutput("difference:[ (noise+signal)-(noise)] just signal: " +String(a-b),5);
-
-  int x = (a+b+c)/3;
-  debugOutput("New Value :" +String(x),4);
-
- 
-  sensorValue = (a+b+c)/3;  
-
-  if (sensorValue < 2000) {
+  if (sensorValue > 2500) {
     sensorState = HIGH;
     debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } else {
@@ -132,4 +149,6 @@ void getSensorIRState() {
     debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
   }
 }
+
+
 

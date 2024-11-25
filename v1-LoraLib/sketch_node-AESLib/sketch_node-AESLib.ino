@@ -67,8 +67,8 @@ PINs,
 
 */ 
 
-//#include "config-node-a1.h"
-#include "config-node-a2.h"
+#include "config-node-a1.h"
+//#include "config-node-a2.h"
 
 // Sensitive configs
 #include "secrets.h"   
@@ -411,12 +411,21 @@ void sendReadings()
   //doc1["pressure"] = Pressure;
 
   doc1["sensor_value"] = sensorValue;
+  /**
   if (sensorState == LOW && sensorValue == 0) {
     doc1["sensor_state"] = "false";
   }
   else {
     doc1["sensor_state"] = "true";
   }
+  **/
+  if (sensorState == LOW ) {
+    doc1["sensor_state"] = "false";  // 
+  }
+  else {
+    doc1["sensor_state"] = "true";  // Ist da
+  }
+  
 
   doc1["vbattery"] = VBAT;
   doc1["wakeup_reason"] = esp_sleep_get_wakeup_cause();

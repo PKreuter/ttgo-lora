@@ -113,12 +113,7 @@ float average (int * array, int len)  // assuming array is int.
   for (int i = 0 ; i < len ; i++) {
     sum += array [i] ;
   }
-  Serial.print("sum: ");
-  Serial.print(sum);
-  Serial.print(", len: ");
-  Serial.print(len);
-  Serial.print(", avg as int: ");
-  Serial.println( ((int) sum) / len);
+  debugOutput("sum: " +String(sum)+ ", len: " +String(len)+ ", avg as int: " +String( ((int) sum) / len), 5);
   return  ((float) sum) / len ;  // average will be fractional, so float may be appropriate.
 }
 
@@ -138,10 +133,13 @@ void getSensorIRState() {
     //Serial.println(AnalogWert);
   }
 
-  Serial.println(average(data, anz));
   sensorValue=(average(data, anz));
  
-  if (sensorValue > 2500) {
+  if (sensorValue > 4000) {
+    sensorState = LOW;
+    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
+  }
+  else if (sensorValue > 2500) {
     sensorState = HIGH;
     debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } else {

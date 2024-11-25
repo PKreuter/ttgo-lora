@@ -148,6 +148,7 @@ RTC_DATA_ATTR int bootCount = 0;
 #include <base64.h>
 
 
+
 void bufferSize(char* text, int &length)
 {
   int i = strlen(text);

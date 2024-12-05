@@ -1,4 +1,20 @@
 
+
+/**
+
+Chip is ESP32-C6 (QFN40) (revision v0.0)
+
+
+IDE
+- ESP32C6 Dev Module
+- Flash Size 8MB
+- Partition Scheme 8MB
+- Tools > USB CDC On Boot > Enabled
+
+
+
+**/
+
 // Generic config
 
 // Version

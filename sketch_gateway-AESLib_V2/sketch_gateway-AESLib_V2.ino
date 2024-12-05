@@ -44,14 +44,14 @@ int countdownMS = Watchdog.enable(60 * 1000);
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_SSD1351.h>
 
-
+// Webserver
+#include <AsyncTCP.h>
 #include "ESPAsyncWebServer.h"
 
-// include the library
+// WiFi and Radio
 #include <RadioLib.h>
-
-// Libraries for WiFi
 #include <WiFi.h>
+
 // to get time from NTP Server
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -93,13 +93,17 @@ bool loraHasData = false;
 // Initialize variables to get and save Wifi data
 int8_t rssiWiFi;
 
+String lastReceivedLoraNode = "";
+// store data from lora
+String lora_data_str;
+
 
 // Store number of MQTT messages
 String acknowledgedMsgCount = "0";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
-
+ 
 
 // OLED line 1..6, writePixel (x, y, color)
 int displayRow1 = 0;
@@ -110,8 +114,8 @@ int displayRow5 = 41;
 int displayRow6 = 51;
 int displayRow7 = 56;
 
-// Buffer to write message to display
-char text[25] = {0};
+// Buffer to write message to serial port
+char text[500] = {0};
 
 WiFiClient espClient;
 
@@ -123,8 +127,11 @@ WiFiClient espClient;
 //SX1262 radio = new Module(SPI_LORA_SS, SPI_LORA_DIO1, SPI_LORA_RST, SPI_LORA_BUSY);
 SX1262 radio = new Module(4, 11, 5, 3);
 
+
+
 // flag to indicate that a packet was received
 volatile bool receivedFlag = false;
+
 
 // this function is called when a complete packet
 // is received by the module
@@ -133,20 +140,25 @@ volatile bool receivedFlag = false;
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
+
+
+
+
 void setFlag(void) {
   // we got a packet, set the flag
   receivedFlag = true;
 }
 
-// store lora data
-//String str;
-// END LoRA
 
 
+//#define OLED_RESET 4
+//Adafruit_SSD1306 display(OLED_RESET);
 
 
 // Define OLED instance
-Adafruit_SSD1306 display(SCREEN_1_WIDTH, SCREEN_1_HEIGHT, &Wire, -1); // Instanziierung
+#define OLED_RESET  -1
+#define SSD1306_I2C_ADDRESS 0x3c
+Adafruit_SSD1306 oled1(SCREEN_1_WIDTH, SCREEN_1_HEIGHT, &Wire, OLED_RESET); // Instanziierung
 #include "oled.h"
 
 // *** OLED2
@@ -158,7 +170,7 @@ char oldTimeString[MaxString]           = { 0 };
 // OLED 128x128
 #define SCREEN_2_WIDTH  128
 #define SCREEN_2_HEIGHT 128 // Change this to 96 for 1.27" OLED.
-Adafruit_SSD1351 oled = Adafruit_SSD1351(
+Adafruit_SSD1351 oled2 = Adafruit_SSD1351(
   SCREEN_2_WIDTH, SCREEN_2_HEIGHT, 
   SPI_OLED_2_SS, 
   MISO, 
@@ -175,14 +187,14 @@ const uint16_t        OLED_Backround_Color    = OLED_Color_Black;
 
 void initOLED2() {
       // initialise the SSD1331
-    oled.begin();
-    oled.fillScreen(0x0000); // This clears entire screen (BLACK)
-    oled.setFont();
-    oled.fillScreen(OLED_Backround_Color);
-    oled.setTextColor(OLED_Text_Color);
-    oled.setTextSize(1);
-    oled.setCursor(0,100);
-    oled.print("OLED_Text_Color");
+    oled2.begin();
+    oled2.fillScreen(0x0000); // This clears entire screen (BLACK)
+    oled2.setFont();
+    oled2.fillScreen(OLED_Backround_Color);
+    oled2.setTextColor(OLED_Text_Color);
+    oled2.setTextSize(1);
+    oled2.setCursor(0,100);
+    oled2.print("OLED_Text_Color");
 }
 
 
@@ -216,23 +228,23 @@ void displayUpTime()
     // has the time string changed since the last oled update?
     if (strcmp(newTimeString,oldTimeString) != 0) {
         // yes! home the cursor
-        oled.setCursor(0,0);
+        oled2.setCursor(0,0);
         // change the text color to the background color
-        oled.setTextColor(OLED_Backround_Color);
+        oled2.setTextColor(OLED_Backround_Color);
         // redraw the old value to erase
-        oled.print(oldTimeString);
+        oled2.print(oldTimeString);
         // home the cursor
-        oled.setCursor(0,0);
+        oled2.setCursor(0,0);
         // change the text color to foreground color
-        oled.setTextColor(OLED_Text_Color);
+        oled2.setTextColor(OLED_Text_Color);
         // draw the new time value
-        oled.print(newTimeString);
-        oled.setCursor(0,20);
-        oled.setTextColor(OLED_Backround_Color);
-        oled.print(oldTimeString);
-        oled.setCursor(0,20);
-        oled.setTextColor(OLED_Color_Blue);
-        oled.print(newTimeString);
+        oled2.print(newTimeString);
+        oled2.setCursor(0,20);
+        oled2.setTextColor(OLED_Backround_Color);
+        oled2.print(oldTimeString);
+        oled2.setCursor(0,20);
+        oled2.setTextColor(OLED_Color_Blue);
+        oled2.print(newTimeString);
         // and remember the new value
         strcpy(oldTimeString,newTimeString);
         
@@ -242,18 +254,26 @@ void displayUpTime()
 // *** END OLED2
 
 
-void showVersion()
+void showDisplay_Version()
 {
   sprintf(text, "Version %s", String(VERSION));
-  oledWriteMsg(0,displayRow1, text);
-  oledWriteMsg(0,displayRow2, "LoRa Gateway");
+  oled1WriteMsg(0,displayRow1, text);
+  oled1WriteMsg(0,displayRow2, "LoRa Gateway");
   delay(2 * mS_TO_S_FACTOR); 
 }
 
+#include "esp_heap_caps.h"
+
+void heap_caps_alloc_failed_hook(size_t requested_size, uint32_t caps, const char *function_name)
+{
+  printf("%s was called but failed to allocate %d bytes with 0x%X capabilities. \n",function_name, requested_size, caps);
+}
 
 void setup()
 {
   Serial.begin(BAUD);
+
+  Debug.println(F("---"));
 
   // Init Logger
   isDebugEnabled();
@@ -276,20 +296,24 @@ void setup()
   int countdownMS = Watchdog.enable(60 * 1000);
   debugOutput("Enable Watchdog with max countdown of " +String(countdownMS, DEC)+ " milliseconds", 5);
 
-  initOLED();
-  //initOLED2();
-  showVersion();
+
+  initOLED1();
+  //initOLED2();  // vertraget sich so nicht mit SX1262
+  showDisplay_Version();
+
+  sprintf(text, "oled done ... "); oled1WriteMsg(2, displayRow6, text); 
 
   initLoRA();
-
+    radio.setPacketReceivedAction(setFlag);
+  sprintf(text, "lora done"); oled1WriteMsg(2, displayRow6, text);
   // nicht getested
   //mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   //wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
 
 
   WiFi.onEvent(WiFiEvent);
-
   connectToWifi();
+  sprintf(text, "wifi done ... "); oled1WriteMsg(2, displayRow6, text);
   
   //wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
   //wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
@@ -299,8 +323,11 @@ void setup()
   timeClient.begin();
 
   setupDateTime();
-  showTime();
-  
+  //showTime();
+  sprintf(text, "time done ... "); oled1WriteMsg(2, displayRow6, text);
+    
+
+
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
   //mqttClient.onSubscribe(onMqttSubscribe);
@@ -311,62 +338,123 @@ void setup()
   mqttClient.setCredentials(SECRET_MQTT_USERNAME, SECRET_MQTT_PASSWORD);
 
   connectToMqtt();
+  sprintf(text, "mqtt done ... "); oled1WriteMsg(2, displayRow6, text);
+  
 
   Watchdog.disable();
   debugOutput("All seems Connected, disable Watchdog", 5);
 
+  Debug.println(F("------"));
+
   // AES
   aes_init();
   //aesLib.set_paddingmode(paddingMode::CMS);
+  sprintf(text, "aes done ... "); oled1WriteMsg(2, displayRow6, text);
 
-  webserver();
-  
-  oled.fillScreen(OLED_Backround_Color);
-  oled.setTextColor(OLED_Text_Color);
-  oled.setTextSize(1);
-  oled.setCursor(0,700);
-  oled.print("OLED_Text_Color");
+  //esp_err_t error = heap_caps_register_failed_alloc_callback(heap_caps_alloc_failed_hook);
+  //void *ptr = heap_caps_malloc(allocation_size, MALLOC_CAP_DEFAULT);
+
+  //webserver();
+ // sprintf(text, "web done "); oled1WriteMsg(2, displayRow6, text);
+
+/**
+  oled2.fillScreen(OLED_Backround_Color);
+  oled2.setTextColor(OLED_Text_Color);
+  oled2.setTextSize(1);
+  oled2.setCursor(0,700);
+  oled2.print("OLED_Text_Color");
+**/
+
+  Debug.setDebugLevel(1);
+  Debug.println(F("Debug 5 is on again"));
+
+  // clear
+  sprintf(text, "            ");
+  oled1WriteMsg(0,displayRow3, text);
+
+  sprintf(text, "finished  "); oled1WriteMsg(2, displayRow6, text);  
 
 }
 
 
 
-// Initialize OLED Module
-void initOLED()
-{
-  debugOutput("Initializing OLED Module", 5);
-  //reset OLED display via software
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3C for 128x32
-    debugOutput("*SSD1306 allocation failed", 2);
+//screen 1
+const unsigned char PROGMEM screen1 [] = {
+ 
+};
+
+
+
+
+// initialize OLED SSD1306 with the I2C addr 0x3D (for the 128x64)
+// bool:reset set to TRUE or FALSE depending on you display
+void initOLED1() {
+  debugOutput("[SSD1306] Initializing...", 5);
+  if (!oled1.begin(SSD1306_SWITCHCAPVCC, SSD1306_I2C_ADDRESS, true)) { 
+    debugOutput("[SSD1306]* allocation failed", 2);
     for (;;)
       ; // Don't proceed, loop forever
   }
-  display.clearDisplay();
-  oledWriteMsg(0,displayRow3, "OLED Module OK");
+  // Clear the buffer.
+  oled1.display();
+  delay(20); //omit delay to hide adafruit slashscreen, sorry!
+  oled1.clearDisplay();
+  oled1.display();
+
+  testdrawline();
+ 
+ /**
+  // display splashscreen bitmap display
+  oled1.drawBitmap(5, 5,  screen1, 120, 56, 1);
+  oled1.display();
+  delay(2000);
+  oled1.clearDisplay();
+  oled1.display();
+
+  oled1.setTextColor(BLACK, BLACK);
+  oled1.clearDisplay();
+  oled1.display();
+  **/
+
+  sprintf(text, "OLED  OK");
+  oled1WriteMsg(0,displayRow3, text);
 
   Watchdog.reset(); 
  }
 
 
-// Initialize LoRa Module
+void testdrawline() {
+  int16_t i;
+  oled1.clearDisplay(); // Clear display buffer
+  for(i=0; i<oled1.width(); i+=4) {
+    oled1.drawLine(0, 0, i, oled1.height()-1, WHITE);
+    oled1.display(); // Update screen with each newly-drawn line
+    delay(1);
+  }
+  for(i=0; i<oled1.height(); i+=4) {
+    oled1.drawLine(0, 0, oled1.width()-1, i, WHITE);
+    oled1.display();
+    delay(1);
+  }
+  oled1.clearDisplay();
+}
+
+
+// Initialize LoRa Module SX1262
 void initLoRA()
 {
-  debugOutput("Initializing LoRa Module", 5);  
-
-  // initialize SX1276 with default settings
-  Serial.print(F("[SX1262] Initializing ... "));
+  debugOutputP1("[SX1262] Initializing... ", 4);
   int state = radio.begin();
   if (state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
+    debugOutputP2("  success!", 4);
   } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
+    debugOutputP2("  failed, code " +String(state), 5);
     while (true) { delay(10); }
   }
 
     // set carrier frequency to 433.5 MHz
   if (radio.setFrequency(866.6) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-    Serial.println(F("[SX1262] Selected frequency is invalid for this module!"));
+    debugOutput("[SX1262] Selected frequency is invalid for this module!", 5);
     while (true) { delay(10); }
   }
 
@@ -376,13 +464,12 @@ void initLoRA()
 
 
   // start listening for LoRa packets
-  Serial.print(F("[SX1262] Starting to listen ... "));
+  debugOutputP1("[SX1262] Starting to listen ... ", 4);
   state = radio.startReceive();
   if (state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
+    debugOutputP2("   success!", 4);
   } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
+    debugOutputP2("   failed, code " +String(state), 5);
     while (true) { delay(10); }
   }
 
@@ -402,26 +489,82 @@ void initLoRA()
 
 
 
+/**
+  state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("success!"));
+  } else {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+    while (true) { delay(10); }
+  }
+**/
 
 
+
+int wifi_status = WL_IDLE_STATUS;
 
 void connectToWifi() 
 {
   debugOutput("Connecting to WiFi " +String(SECRET_WIFI_SSID), 5);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    debugOutput("Attemping to connect...", 5);
+    wifi_status = WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
+    delay(10000);
+  }
+
+  Serial.println(wifi_status);
+
+  /**
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(F("wifi."));
   }
+  **/
+  int state = WiFi.status();
+  Serial.println(state);
   
-  // write new
-  display.setCursor(0,10);
-  display.print("IP: ");
-  display.setCursor(20,10);
-  display.print(WiFi.localIP());
-  display.display();
-
   Watchdog.reset();
+
+
+}
+
+
+void showDisplay_WifiIp()
+{
+  oled1.setCursor(0,10);
+  oled1.print("IP: ");
+  oled1.setCursor(20,10);
+  oled1.print(WiFi.localIP());
+  oled1.display();
+}
+
+void WiFiEvent(WiFiEvent_t event)
+{
+  debugOutput("[WiFi-event] event: " +String(event), 5);
+  switch(event) {
+    //case SYSTEM_EVENT_STA_START:
+    //  Serial.println("WiFi Started");
+    //  break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      debugOutput("Wifi connected, RSSI: " +String(WiFi.RSSI())+ ", IP address: " +String(WiFi.localIP().toString()), 4);
+      showDisplay_WifiIp();
+      //rssiWiFi = WiFi.RSSI();
+      //connectToMqtt();
+      break;
+    case WIFI_EVENT_STA_DISCONNECTED:
+      debugOutput("Wifi lost connection!", 3);
+      xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+      xTimerStart(wifiReconnectTimer, 0);
+      break;
+    //case SYSTEM_EVENT_STA_DISCONNECTED:
+    //  Serial.println("WiFi lost connection");
+    //  xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+		//  xTimerStart(wifiReconnectTimer, 0);
+    //  break;
+  }
 }
 
 
@@ -443,30 +586,6 @@ void connectToMqtt()
 
 
 
-void WiFiEvent(WiFiEvent_t event)
-{
-  debugOutput("[WiFi-event] event: " +String(event), 5);
-  switch(event) {
-    //case SYSTEM_EVENT_STA_START:
-    //  Serial.println("WiFi Started");
-    //  break;
-    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      debugOutput("Wifi connected, RSSI: " +String(WiFi.RSSI())+ ", IP address: " +String(WiFi.localIP().toString()), 4);
-      //rssiWiFi = WiFi.RSSI();
-      //connectToMqtt();
-      break;
-    case WIFI_EVENT_STA_DISCONNECTED:
-      debugOutput("Wifi lost connection!", 3);
-      xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-      xTimerStart(wifiReconnectTimer, 0);
-      break;
-    //case SYSTEM_EVENT_STA_DISCONNECTED:
-    //  Serial.println("WiFi lost connection");
-    //  xTimerStop(mqttReconnectTimer, 0); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-		//  xTimerStart(wifiReconnectTimer, 0);
-    //  break;
-  }
-}
 
 
 void onMqttConnect(bool sessionPresent)
@@ -507,10 +626,14 @@ void getTs() {
 **/
 
 
-
+/**
 void webserver()
 {  
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "OK");
+  });
+
+  server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", "OK");
   });
 
@@ -520,17 +643,39 @@ void webserver()
   });
 
   server.on("/tech", HTTP_GET, [](AsyncWebServerRequest *request) {
-    StaticJsonDocument<250> data;
-    timeClient.update();
-    long ts = timeClient.getEpochTime();
+    JsonDocument data;
+    //timeClient.update();
+    //long ts = timeClient.getEpochTime();
+
+    long ts = DateTime.now();
+    String formattedDate = DateTime.toISOString().c_str();
+  
     data["ts"] = ts;
+    data["DateTimeUTC"] = formattedDate;
+    data["uptime"] = esp_timer_get_time() / 1000000;
     data["name"] = NAME;
     data["firmware_rev"] = VERSION;
     data["wifi_rssi"] = String(WiFi.RSSI());
-    data["LoRa Packets received"] = loraPacketRecv;
-    data["MQTT Server"] = MQTT_BROKER;
-    data["MQTT Status"] = "online";
-    data["MQTT Packets acknowledged"] = acknowledgedMsgCount;
+
+
+    // Get the current uptime in milliseconds
+    uint64_t uptime_ms = esp_timer_get_time() / 1000;
+        // Display the uptime in seconds
+    ESP_LOGI("main", "Uptime: %llu seconds", uptime_ms / 1000);
+    
+    JsonDocument doc_lora;
+    doc_lora["Packets received"] = loraPacketRecv;
+    doc_lora["Node last seen"] = lastReceivedLoraNode;
+    data["lora"] = doc_lora;
+
+    // nested
+    JsonDocument doc_mqtt; 
+    doc_mqtt["Server"] = MQTT_BROKER;
+    doc_mqtt["Status"] = "online";
+    doc_mqtt["Packets send"] = "0";    
+    doc_mqtt["Packets acknowledged"] = acknowledgedMsgCount;
+    data["mqtt"] = doc_mqtt;
+
 
     String response;
     serializeJson(data, response);
@@ -546,17 +691,18 @@ void notFound(AsyncWebServerRequest *request)
 {
     request->send(404, "text/plain", "Not found");
 }
+**/
 
 
 void update_display()
 {
-  oledWriteMsg(0,displayRow1, "RUNNING...       OK");
+  oled1WriteMsg(0,displayRow1, "RUNNING...       OK");
   sprintf(text, "WiFi rssi: %s        ", String(WiFi.RSSI()));
-  oledWriteMsg(0,displayRow3, text);
+  oled1WriteMsg(0,displayRow3, text);
   sprintf(text, "MQTT tx: %s        ", String(acknowledgedMsgCount));
-  oledWriteMsg(0,displayRow4, text);
+  oled1WriteMsg(0,displayRow4, text);
   sprintf(text, "LoRa rx: %s        ", String(loraPacketRecv));
-  oledWriteMsg(0,displayRow6, text);    
+  oled1WriteMsg(0,displayRow6, text);    
 }
 
 /**
@@ -673,50 +819,40 @@ void getLoRaDataX()
 
 
 
-void getLoRaData(String lora_data){
-  loraPacketRecv++;
+void processLoRaData(){
 
-  // packet was successfully received
-  debugOutput("[SX1262] Received packet: " +String(loraPacketRecv), 4);
 
-  // print data of the packet
-  debugOutput("[SX1262] Data:\t" +String(lora_data),5);
-
-  // print RSSI (Received Signal Strength Indicator)
-  debugOutput("[SX1262] RSSI:\t" +String(radio.getRSSI())+ " dBm",5);
-
-  // print SNR (Signal-to-Noise Ratio)
-  debugOutput("[SX1262] SNR:\t" +String(radio.getSNR())+ " dB",5);
 
 
     // plain JSON
-  if(lora_data.indexOf("data") > 0) {
-      Serial.printf(" Receive Plain Data: \n ");  // muss so sein
-      Serial.println(lora_data);
-      JsonDocument doc; 
-      deserializeJson(doc, lora_data);
+  JsonDocument doc;   
+  if(lora_data_str.indexOf("data") > 0) {
+      debugOutput(" Received Plain Data:", 5);
+      debugOutput("  Plaintext: " +String(lora_data_str), 5);
+      debugOutput("  Plaintext length: " +String(lora_data_str.length()), 5);
+      //JsonDocument doc; 
+      deserializeJson(doc, lora_data_str);
       json_val = doc["data"];
       loraHasData = true;
     }
     // Error message
-    else if(lora_data.indexOf("ERROR") > 0) {
-      debugOutput(" ERROR message received from Node: " +String(lora_data), 3);
-      JsonDocument doc; 
-      doc["message"] = lora_data;
-    //  doc["recipient"] = recipient;
-    //  doc["loraRecvFrom"] = loraRecvFrom;
-    //  doc["incomingMsgId"] = incomingMsgId;
-    //  doc["incomingLengt"] = incomingLength;
-      serializeJson(doc, jsonSerial);
+    else if(lora_data_str.indexOf("ERROR") > 0) {
+      debugOutput(" ERROR message received from Node: " +String(lora_data_str), 3);
+      debugOutput("  Message: " +String(lora_data_str), 5);
+      debugOutput("  Message length: " +String(lora_data_str.length()), 5);
+      //JsonDocument doc; 
+      deserializeJson(doc, lora_data_str);
+      json_val = doc["data"];
       loraHasData = true;
     } 
+    
     // encrypted
     else {
       debugOutput(" Received Encrypted Data:", 5);
-      debugOutput("  Ciphertext: " +String(lora_data), 5);
-      debugOutput("  Ciphertext length: " +String(lora_data.length()), 5);
+      debugOutput("  Ciphertext: " +String(lora_data_str), 5);
+      debugOutput("  Ciphertext length: " +String(lora_data_str.length()), 5);
 
-      sprintf(ciphertext, "%s", lora_data.c_str());
+      sprintf(ciphertext, "%s", lora_data_str.c_str());
       byte dec_iv[N_BLOCK] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
       String decrypted = decrypt_impl(ciphertext, dec_iv);
 
@@ -729,7 +865,11 @@ void getLoRaData(String lora_data){
       loraHasData = true;
     }
 
+    // was ist wenn nicht lesbar try/except
+
 }
+
+
 
 
 
@@ -742,14 +882,17 @@ void blinkts(int blinkLEDInterval)
   if (timeNow - previousLEDmillis > blinkLEDInterval) {   // counts up time until set interval
     previousLEDmillis = timeNow;                          // save it as new time (interval reset)
     if (stateLED == LOW)  {                               // check if LED is LOW
-      stateLED = HIGH;                                    // then set it HIGH for the next loop
-      oledWriteMsg(100,displayRow1, "*   ");              // Print "ON" at Serial console
+      stateLED = HIGH; 
+      sprintf(text, "*   ");                                   // then set it HIGH for the next loop
+      oled1WriteMsg(100,displayRow1, text);              // Print "ON" at Serial console
     } else  {      
-      stateLED = LOW;                                     // in case LED is HIGH make LED LOW
-      oledWriteMsg(100,displayRow1, "    ");              // Print "OFF" at Serial console
+      stateLED = LOW;  
+      sprintf(text, "    ") ;                                   // in case LED is HIGH make LED LOW
+      oled1WriteMsg(100,displayRow1, text);              // Print "OFF" at Serial console
     }
   }
 }
+
 
 
 
@@ -761,33 +904,62 @@ void loop()
 
   // check if the flag is set
   if(receivedFlag) {
-    Serial.println("receivedFlag = true");
-    // reset flag
-    receivedFlag = false;
-
-    // you can read received data as an Arduino String
-    String str;
-    int state = radio.readData(str);
-
-    // you can also read received data as byte array
-    /*
-      byte byteArr[8];
-      int numBytes = radio.getPacketLength();
-      int state = radio.readData(byteArr, numBytes);
-    */
+ 
+    debugOutput("[SX1262] receivedFlag = true", 5);
+    //digitalWrite(ledPin, HIGH);
+    sprintf(text, "*"); oled1WriteMsg(100, displayRow6, text);
     
+    // packet was received
+    loraPacketRecv++;
+    debugOutput("[SX1262] Received packet " +String(loraPacketRecv), 4);
+    sprintf(text, "LoRa rx: %s        ", String(loraPacketRecv));
+    oled1WriteMsg(0,displayRow6, text);
+
+    // aktiv wenn keine Daten kommen, miss 2 15 min samples
+//    int countdownMS = Watchdog.enable(2000 * 1000);
+ 
+    // you can read received data as an Arduino String
+//    debugOutput("[SX1262] read...", 5);
+//    int state = radio.readData(lora_data_str);
+
+
+  //  String str;
+  //  int state = radio.readData(str);
+	
+	//	byte byteArr[500];
+	//	int state = radio.receive(byteArr, 500);
+
+  int state = 0;
+	if (state == RADIOLIB_ERR_NONE) {
+
+     // reset flag
+    receivedFlag = false;
+ 
+    // print RSSI (Received Signal Strength Indicator)
+    debugOutput("[SX1262] RSSI:\t" +String(radio.getRSSI())+ " dBm",5);
+
+    // print SNR (Signal-to-Noise Ratio)
+    debugOutput("[SX1262] SNR:\t" +String(radio.getSNR())+ " dB",5);
+
+    // print data of the packet
+    debugOutput("[SX1262] Data:\t" +String(lora_data_str),5);
+   // processLoRaData(lora_data_str);
+
+  }
+  
+/**
     if (state == RADIOLIB_ERR_NONE) {
+//    if (1  == 2) {  
       // packet was successfully received
-      Serial.println(F("[SX1262] Received packet!"));
+      debugOutput("[SX1262] Received packet!", 5);
 
  
-      //digitalWrite(ledPin, HIGH); 
-      oledWriteMsg(100, displayRow6, "***");
+      
       
       getLoRaData(str);
 
       //digitalWrite(ledPin, LOW); 
-      oledWriteMsg(100,displayRow6, "   ");
+      oled1WriteMsg(100,displayRow6, "   ");
     
     
     // we had lora data
@@ -832,7 +1004,8 @@ void loop()
 
   **/
 
-
+  
+  /** EXCLUDE FOR DEBUG
       String formattedDate = DateTime.toISOString().c_str();
       long ts = DateTime.now();
       debugOutput("TS: " +String(ts)+ " - " +String(formattedDate), 5);
@@ -855,6 +1028,7 @@ void loop()
       str.toLowerCase();
       loraRecvFrom = str;
 
+      lastReceivedLoraNode = loraRecvFrom;
 
       // add data from LoRa
       doc["data"] = json_val;
@@ -867,8 +1041,12 @@ void loop()
       debugOutput("Publishing on topic " +String(topic)+ " PacketId: " +String(packetIdPub)+ " Message: " +String(jsonSerial), 5); 
       
       loraHasData = false;
+  
+      Watchdog.disable();
+  
     }
     
+  
     
 
     // update when someting has changed
@@ -876,7 +1054,20 @@ void loop()
  
     }
 
-     delay(1000);
+  **/   // EXCLUDE for DEBUG
+
+    // START DEBUG, ab hier nur for debugging
+    sprintf(text, "LoRa rx: %s        ", String(loraPacketRecv));
+    oled1WriteMsg(0,displayRow6, text);
+    // END DEBUG    
+    
+    // lora received and processed, so we disable
+    Watchdog.disable();
+
+    //delay(1000);
+
+    //digitalWrite(ledPin, LOW);
+    sprintf(text, " "); oled1WriteMsg(100, displayRow6, text);
 
   }
 

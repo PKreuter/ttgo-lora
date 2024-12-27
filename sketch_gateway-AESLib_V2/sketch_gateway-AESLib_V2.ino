@@ -65,22 +65,17 @@ char jsonSerial[250];  // length of JSON
 JsonDocument doc;      // to store input
 JsonDocument json_val; // contains JSON from Node
 
-
 // AES
 #include "aes.h"
-
 
 // Create objects to handle MQTT client
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
-
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
-
-
 
 // heartbeat
 unsigned long previousMillis = 0;    // Stores last time temperature was published
@@ -123,7 +118,6 @@ WiFiClient espClient;
 #include <DateTime.h>
 
 // LoRa
-// SX1262 radio = new Module(4, 11, 5, 3);
 //SX1262 radio = new Module(SPI_LORA_SS, SPI_LORA_DIO1, SPI_LORA_RST, SPI_LORA_BUSY);
 SX1262 radio = new Module(4, 11, 5, 3);
 
@@ -137,22 +131,14 @@ volatile bool receivedFlag = false;
 // is received by the module
 // IMPORTANT: this function MUST be 'void' type
 //            and MUST NOT have any arguments!
-#if defined(ESP8266) || defined(ESP32)
-  ICACHE_RAM_ATTR
-#endif
-
-
-
-
+//#if defined(ESP8266) || defined(ESP32)
+//  ICACHE_RAM_ATTR
+//#endif
+void  ICACHE_RAM_ATTR setFlag();
 void setFlag(void) {
   // we got a packet, set the flag
   receivedFlag = true;
 }
-
-
-
-//#define OLED_RESET 4
-//Adafruit_SSD1306 display(OLED_RESET);
 
 
 // Define OLED instance
@@ -161,101 +147,9 @@ void setFlag(void) {
 Adafruit_SSD1306 oled1(SCREEN_1_WIDTH, SCREEN_1_HEIGHT, &Wire, OLED_RESET); // Instanziierung
 #include "oled.h"
 
-// *** OLED2
-// declare size of working string buffers. Basic strlen("d hh:mm:ss") = 10
-const size_t    MaxString               = 16;
-// the string being displayed on the SSD1331 (initially empty)
-char oldTimeString[MaxString]           = { 0 };
-
-// OLED 128x128
-#define SCREEN_2_WIDTH  128
-#define SCREEN_2_HEIGHT 128 // Change this to 96 for 1.27" OLED.
-Adafruit_SSD1351 oled2 = Adafruit_SSD1351(
-  SCREEN_2_WIDTH, SCREEN_2_HEIGHT, 
-  SPI_OLED_2_SS, 
-  MISO, 
-  MOSI,
-  SCK,
-  SPI_OLED_2_RST);
-
-// SSD1331 color definitions
-const uint16_t  OLED_Color_Black        = 0x0000;
-const uint16_t  OLED_Color_Blue         = 0x001F;
-// The colors we actually want to use
-const uint16_t        OLED_Text_Color         = OLED_Color_Blue;
-const uint16_t        OLED_Backround_Color    = OLED_Color_Black;  
-
-void initOLED2() {
-      // initialise the SSD1331
-    oled2.begin();
-    oled2.fillScreen(0x0000); // This clears entire screen (BLACK)
-    oled2.setFont();
-    oled2.fillScreen(OLED_Backround_Color);
-    oled2.setTextColor(OLED_Text_Color);
-    oled2.setTextSize(1);
-    oled2.setCursor(0,100);
-    oled2.print("OLED_Text_Color");
-}
 
 
-void displayUpTime()
-{
-    // calculate seconds, truncated to the nearest whole second
-    unsigned long upSeconds = millis() / 1000;
-    // calculate days, truncated to nearest whole day
-    unsigned long days = upSeconds / 86400;
-    // the remaining hhmmss are
-    upSeconds = upSeconds % 86400;
-    // calculate hours, truncated to the nearest whole hour
-    unsigned long hours = upSeconds / 3600;
-    // the remaining mmss are
-    upSeconds = upSeconds % 3600;
-    // calculate minutes, truncated to the nearest whole minute
-    unsigned long minutes = upSeconds / 60;
-    // the remaining ss are
-    upSeconds = upSeconds % 60;
-
-    // allocate a buffer
-    char newTimeString[MaxString] = { 0 };
-
-    // construct the string representation
-    sprintf(
-        newTimeString,
-        "%lu %02lu:%02lu:%02lu",
-        days, hours, minutes, upSeconds
-    );
-
-    // has the time string changed since the last oled update?
-    if (strcmp(newTimeString,oldTimeString) != 0) {
-        // yes! home the cursor
-        oled2.setCursor(0,0);
-        // change the text color to the background color
-        oled2.setTextColor(OLED_Backround_Color);
-        // redraw the old value to erase
-        oled2.print(oldTimeString);
-        // home the cursor
-        oled2.setCursor(0,0);
-        // change the text color to foreground color
-        oled2.setTextColor(OLED_Text_Color);
-        // draw the new time value
-        oled2.print(newTimeString);
-        oled2.setCursor(0,20);
-        oled2.setTextColor(OLED_Backround_Color);
-        oled2.print(oldTimeString);
-        oled2.setCursor(0,20);
-        oled2.setTextColor(OLED_Color_Blue);
-        oled2.print(newTimeString);
-        // and remember the new value
-        strcpy(oldTimeString,newTimeString);
-        
-    }
-
-}
-// *** END OLED2
-
-
-void showDisplay_Version()
-{
+void showDisplay_Version() {
   sprintf(text, "Version %s", String(VERSION));
   oled1WriteMsg(0,displayRow1, text);
   oled1WriteMsg(0,displayRow2, "LoRa Gateway");
@@ -264,23 +158,19 @@ void showDisplay_Version()
 
 #include "esp_heap_caps.h"
 
-void heap_caps_alloc_failed_hook(size_t requested_size, uint32_t caps, const char *function_name)
-{
+void heap_caps_alloc_failed_hook(size_t requested_size, uint32_t caps, const char *function_name) {
   printf("%s was called but failed to allocate %d bytes with 0x%X capabilities. \n",function_name, requested_size, caps);
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(BAUD);
-
-  Debug.println(F("---"));
-
   // Init Logger
   isDebugEnabled();
 
   debugOutput("***LoRa Receiver - Version " +String(VERSION), 5);
 
-  Wire.setPins(I2C_SDA, I2C_SCL); // Set the I2C pins before begin
+  // Set the I2C pins before begin
+  Wire.setPins(I2C_SDA, I2C_SCL); 
   Wire.begin(); // join i2c bus (address optional for master)
 
   //SPI default pins for Board ESP32-C6-N8
@@ -304,8 +194,37 @@ void setup()
   sprintf(text, "oled done ... "); oled1WriteMsg(2, displayRow6, text); 
 
   initLoRA();
-    radio.setPacketReceivedAction(setFlag);
+  /**
+  debugOutputP1("[SX1262] Initializing... ", 4);
+  int state = radio.begin();
+  if (state == RADIOLIB_ERR_NONE) {
+    debugOutputP2("  success!", 4);
+  } else {
+    debugOutputP2("  failed, code " +String(state), 5);
+    while (true) { delay(10); }
+  }
+  // set carrier frequency to 433.5 MHz
+  if (radio.setFrequency(866.6) == RADIOLIB_ERR_INVALID_FREQUENCY) {
+    debugOutput("[SX1262] Selected frequency is invalid for this module!", 5);
+    while (true) { delay(10); }
+  }
+
+  // set the function that will be called when new packet is received
+  radio.setPacketReceivedAction(setFlag);
+
+  // start listening for LoRa packets
+  debugOutputP1("[SX1262] Starting to listen ... ", 4);
+  state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE) {
+    debugOutputP2("   success!", 4);
+  } else {
+    debugOutputP2("   failed, code " +String(state), 5);
+    while (true) { delay(10); }
+  }
+  **/
   sprintf(text, "lora done"); oled1WriteMsg(2, displayRow6, text);
+
+  
   // nicht getested
   //mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
   //wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
@@ -325,9 +244,9 @@ void setup()
   setupDateTime();
   //showTime();
   sprintf(text, "time done ... "); oled1WriteMsg(2, displayRow6, text);
-    
+   
 
-
+  // mqtt
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
   //mqttClient.onSubscribe(onMqttSubscribe);
@@ -351,11 +270,8 @@ void setup()
   //aesLib.set_paddingmode(paddingMode::CMS);
   sprintf(text, "aes done ... "); oled1WriteMsg(2, displayRow6, text);
 
-  //esp_err_t error = heap_caps_register_failed_alloc_callback(heap_caps_alloc_failed_hook);
-  //void *ptr = heap_caps_malloc(allocation_size, MALLOC_CAP_DEFAULT);
-
-  //webserver();
- // sprintf(text, "web done "); oled1WriteMsg(2, displayRow6, text);
+  webserver();
+  sprintf(text, "web done "); oled1WriteMsg(2, displayRow6, text);
 
 /**
   oled2.fillScreen(OLED_Backround_Color);
@@ -452,7 +368,7 @@ void initLoRA()
     while (true) { delay(10); }
   }
 
-    // set carrier frequency to 433.5 MHz
+  // set carrier frequency to 433.5 MHz
   if (radio.setFrequency(866.6) == RADIOLIB_ERR_INVALID_FREQUENCY) {
     debugOutput("[SX1262] Selected frequency is invalid for this module!", 5);
     while (true) { delay(10); }
@@ -461,7 +377,6 @@ void initLoRA()
   // set the function that will be called
   // when new packet is received
   radio.setPacketReceivedAction(setFlag);
-
 
   // start listening for LoRa packets
   debugOutputP1("[SX1262] Starting to listen ... ", 4);
@@ -583,19 +498,12 @@ void connectToMqtt()
 }
 
 
-
-
-
-
-
-void onMqttConnect(bool sessionPresent)
-{
+void onMqttConnect(bool sessionPresent) {
   debugOutput("Connected to MQTT, Session present: " +String(sessionPresent), 4);
 }
 
 
-void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
-{
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   debugOutput("Disconnected from MQTT!", 4);
 
   if (WiFi.isConnected()) {
@@ -609,12 +517,11 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 }
 
 
-
-void onMqttPublish(uint16_t packetId)
-{
+void onMqttPublish(uint16_t packetId) {
   debugOutput(" Received acknowledged for packetId " +String(packetId), 4);
   acknowledgedMsgCount = String(packetId);
 }
+// END mqtt
 
 /**
 void getTs() {
@@ -626,9 +533,8 @@ void getTs() {
 **/
 
 
-/**
-void webserver()
-{  
+
+void webserver() {  
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", "OK");
   });
@@ -657,10 +563,9 @@ void webserver()
     data["firmware_rev"] = VERSION;
     data["wifi_rssi"] = String(WiFi.RSSI());
 
-
     // Get the current uptime in milliseconds
     uint64_t uptime_ms = esp_timer_get_time() / 1000;
-        // Display the uptime in seconds
+    // Display the uptime in seconds
     ESP_LOGI("main", "Uptime: %llu seconds", uptime_ms / 1000);
     
     JsonDocument doc_lora;
@@ -676,7 +581,6 @@ void webserver()
     doc_mqtt["Packets acknowledged"] = acknowledgedMsgCount;
     data["mqtt"] = doc_mqtt;
 
-
     String response;
     serializeJson(data, response);
     request->send(200, "application/json", response);
@@ -687,11 +591,10 @@ void webserver()
 }
 
 
-void notFound(AsyncWebServerRequest *request)
-{
+void notFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "Not found");
 }
-**/
+// END webserver
 
 
 void update_display()
@@ -821,9 +724,6 @@ void getLoRaDataX()
 
 void processLoRaData(){
 
-
-
-
     // plain JSON
   JsonDocument doc;   
   if(lora_data_str.indexOf("data") > 0) {
@@ -901,10 +801,9 @@ void blinkts(int blinkLEDInterval)
 // main
 void loop()
 {
-
   // check if the flag is set
   if(receivedFlag) {
- 
+
     debugOutput("[SX1262] receivedFlag = true", 5);
     //digitalWrite(ledPin, HIGH);
     sprintf(text, "*"); oled1WriteMsg(100, displayRow6, text);
@@ -918,50 +817,20 @@ void loop()
     // aktiv wenn keine Daten kommen, miss 2 15 min samples
 //    int countdownMS = Watchdog.enable(2000 * 1000);
  
-    // you can read received data as an Arduino String
-//    debugOutput("[SX1262] read...", 5);
-//    int state = radio.readData(lora_data_str);
+     int state = radio.readData(lora_data_str);
 
+  	if (state == RADIOLIB_ERR_NONE) {
+      // reset flag
+      receivedFlag = false;
 
-  //  String str;
-  //  int state = radio.readData(str);
-	
-	//	byte byteArr[500];
-	//	int state = radio.receive(byteArr, 500);
+      debugOutput("[SX1262] RSSI:\t" +String(radio.getRSSI())+ " dBm",5);
+      debugOutput("[SX1262] SNR:\t" +String(radio.getSNR())+ " dB",5);
+      debugOutput("[SX1262] Data:\t" +String(lora_data_str),5);
 
-  int state = 0;
-	if (state == RADIOLIB_ERR_NONE) {
-
-     // reset flag
-    receivedFlag = false;
- 
-    // print RSSI (Received Signal Strength Indicator)
-    debugOutput("[SX1262] RSSI:\t" +String(radio.getRSSI())+ " dBm",5);
-
-    // print SNR (Signal-to-Noise Ratio)
-    debugOutput("[SX1262] SNR:\t" +String(radio.getSNR())+ " dB",5);
-
-    // print data of the packet
-    debugOutput("[SX1262] Data:\t" +String(lora_data_str),5);
-   // processLoRaData(lora_data_str);
-
-  }
+      // processLoRaData(lora_data_str);
+    }
   
 /**
-    if (state == RADIOLIB_ERR_NONE) {
-//    if (1  == 2) {  
-      // packet was successfully received
-      debugOutput("[SX1262] Received packet!", 5);
-
- 
-      
-      
-      getLoRaData(str);
-
-      //digitalWrite(ledPin, LOW); 
-      oled1WriteMsg(100,displayRow6, "   ");
-    
-    
     // we had lora data
     if(loraHasData) {
 
@@ -1062,7 +931,7 @@ void loop()
     // END DEBUG    
     
     // lora received and processed, so we disable
-    Watchdog.disable();
+    //Watchdog.disable();
 
     //delay(1000);
 

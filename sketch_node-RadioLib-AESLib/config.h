@@ -36,7 +36,6 @@ bool enableIRSensor = true;
 #define SPI_LORA_DIO0 3
 
 
-
 /*
 Der Spreading Factor (SF) beschreibt dabei wieviele Chirps, also Daten Carrier pro Sekunde übertragen werden. 
 Dadurch ist die Bitrate, pro Symbol abgestrahlte Energie und die Reichweite definiert. 

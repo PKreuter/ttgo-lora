@@ -15,8 +15,7 @@ RULES
 - Place RTC_DATA_ATTR in front of any variable that you want to store in RTC memory. 
 
 External Components
-- JOY-IT SEN-US01
-- JOY_IT BMP280 (not used)
+- 
 - DHT22
 
 Arduion IDE
@@ -52,8 +51,7 @@ PINs,
 
   Wenn VBAT dauernd 7.27 V anzeigt siimmt was mit den Widerstand nicht
   PIN: 13, 36 via 10K to VCC
-
-  
+ 
  
   LED
   - red     VBUS
@@ -65,7 +63,15 @@ PINs,
   - TF Card SPI
   - OLED IC2
 
-*/ 
+  check for sleep mode
+    Nomalbetrieb ~40 mA
+    Deep Sleep Mode mit Display=on ~10mA
+    Deep Sleep Mode ~5 mA
+    Zuseatzlich mit LoRa.sleep() ~2mA
+    Wenn Sensor mit Power dann switch-off sensor = ~2mA
+ 
+
+**/ 
 
 //#include "config-node-a1.h"
 #include "config-node-a2.h"
@@ -75,7 +81,6 @@ PINs,
 
 // 
 #include "config.h" 
-#include "log.h"
 #include "init.h"
 #include "sensor.h"
 
@@ -96,7 +101,7 @@ PINs,
  both LOW = Disabled as 'wait_for'
 **/
 const int sleepModePin1 = 13;  
-const int sleepModePin2 = 36; //12; //39;   //2
+const int sleepModePin2 = 36;
 // variable for store the sleepmode
 int sleepMode = 1;   // 0=no sleep, 1=deep, 2=short
 int wait_for = 15;   // every n seconds
@@ -108,13 +113,15 @@ const int pwrPin =  14;  // Power Sensor
 #define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
 //#define GPIO_NUM_34 34
 
-// battery voltage from ESP32 ADC read
-// analog IO of the VBAT   
+// battery voltage from ESP32 ADC read, analog IO of the VBAT   
 const uint8_t vbatPin = 35; 
 float VBAT;
 
 // Send LoRa packets
 const int ledPin =  25;
+
+// debug   
+const uint8_t debugPin = 39; 
 
 // OLED line 0..6, writePixel (x, y, color)
 int displayRow1 = 0;
@@ -148,9 +155,7 @@ RTC_DATA_ATTR int bootCount = 0;
 #include <base64.h>
 
 
-
-void bufferSize(char* text, int &length)
-{
+void bufferSize(char* text, int &length) {
   int i = strlen(text);
   int buf = round(i / BLOCK_SIZE) * BLOCK_SIZE;
   length = (buf <= i) ? buf + BLOCK_SIZE : length = buf;
@@ -171,26 +176,25 @@ int transmissionState = RADIOLIB_ERR_NONE;
 
 //Initialize LoRa Module SX1278
 void initRadioSX() {
-
-  debugOutput("[SX1278] Initializing ... ", 4);
+  ESP_LOGI("SX1278", "Initializing ... ");
   int state = radio.begin();
   if (state == RADIOLIB_ERR_NONE) {
-    debugOutput("[SX1278]   success!", 4);
+    ESP_LOGI("SX1278", "  success!");
   } else {
-    debugOutput("[SX1278]   failed, code " +String(state), 2);
+    ESP_LOGE("SX1278", "  failed, code %s", String(state));
     while (true) { delay(10); }
   }
 
   // set carrier frequency to 433.5 MHz
   if (radio.setFrequency(866.6) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-    debugOutput("[SX1278] Selected frequency is invalid for this module!", 2);
+    ESP_LOGE("SX1278", "Selected frequency is invalid for this module!");
     while (true) { delay(10); }
   }
 
   // set LoRa sync word to 0x14
   // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
   if (radio.setSyncWord(0x14) != RADIOLIB_ERR_NONE) {
-    debugOutput("[SX1278] Unable to set sync word!", 2);
+    ESP_LOGE("SX1278", "Unable to set sync word!");
     while (true) { delay(10); }
   }
 
@@ -198,7 +202,7 @@ void initRadioSX() {
   // NOTE: 20 dBm value allows high power operation, but transmission
   //       duty cycle MUST NOT exceed 1%
   if (radio.setOutputPower(10) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-    debugOutput("[SX1278] Selected output power is invalid for this module!", 2);
+    ESP_LOGE("SX1278", "Selected output power is invalid for this module!");
     while (true) { delay(10); }
   }
 
@@ -219,8 +223,7 @@ void initRadioSX() {
 
 
 
-void showVersion()
-{
+void showVersion() {
   sprintf(text, "Version %s", String(VERSION));
   oledWriteMsg(0, text);
   sprintf(text, "LoRa Node 0x%s", String(localAddress, HEX));
@@ -234,15 +237,20 @@ void setFlag(void) {
   operationDone = true;
 }
 
-void setup()
-{
+
+void setup() {
   //initialize Serial Monitor
   Serial.begin(BAUD);
 
-  // Init Logger
-  isDebugEnabled();
-
-  debugOutput("***LoRa Node - Version " +String(VERSION), 5);
+  // ESP Logging library
+  pinMode(debugPin, INPUT_PULLDOWN);
+  if( digitalRead(debugPin) == LOW) {
+    esp_log_level_set("*", ESP_LOG_NONE);
+  } else {
+    esp_log_level_set("*", ESP_LOG_DEBUG);
+    ESP_LOGI("*", "Log Level *********");
+  }
+  ESP_LOGI("*", "LoRa Node - Version %s", String(VERSION));
 
   // Slowing down the ESP32 to 1/4 of its speed saves more energy
 	setCpuFrequencyMhz(60);
@@ -287,7 +295,8 @@ void setup()
 
   //Increments boot number and prints it every reboot
   bootCount++;
-  debugOutput("Boot number: " + String(bootCount), 5);
+  ESP_LOGD("", "Boot number %s", String(bootCount));
+  //debugOutput("Boot number: " + String(bootCount), 5);
 
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
@@ -300,8 +309,7 @@ void setup()
 
 
 
-void print_sleep_info()
-{
+void print_sleep_info(){
   if (sleepMode == 1) {
     oledWriteMsg(45, "SLEEP Mode 1 - DEEP");
     sprintf(text, "Update every %ss", String(DEEP_SLEEP));
@@ -321,69 +329,66 @@ void print_sleep_info()
 
 
 //function for fetching DHT readings
-void getDHTreadings()
-{
+void getDHTreadings(){
   // Delay between measurements.
   delay(delayMS);
   // Get temperature event and print its value.
   sensors_event_t event;
   dht.temperature().getEvent(&event);
   if (isnan(event.temperature)) {
-    debugOutput("*Error reading temperature!", 3);
+    ESP_LOGE("DHT reading", "*Error reading temperature!");
   }
   else {
     Temperature = event.temperature;
-    debugOutput("Temperature: " +String(Temperature)+ "°C", 4);
+    ESP_LOGI("DHT reading", "Temperature: %s °C", String(Temperature));
   }
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
   if (isnan(event.relative_humidity)) {
-    debugOutput("*Error reading humidity!", 3);
+    ESP_LOGE("DHT reading", "*Error reading humidity!");
   }
   else {
     Humidity = event.relative_humidity;
-    debugOutput("Humidity: " +String(Humidity)+ "%", 4);
+    ESP_LOGI("DHT reading", "Humidity: %s %", String(Humidity));
   }
 }
 
 
 //function for fetching BMP280 readings
-void getBMPreadings()
-{
+void getBMPreadings(){
   //float SLP = bmp.seaLevelForAltitude(SEALEVELPRESSURE_HPA, Pressure);
   //float LLP = bmp.readAltitude(SLP);  //SEALEVELPRESSURE_HPA
   //Pressure = LLP;
   Pressure = bmp.readPressure()/100;
-  debugOutput("Pressure: " +String(Pressure)+ " hPa", 4);
+  ESP_LOGI("BMP", "Pressure: %s hPa", String(Pressure));
 
   Temperature = bmp.readTemperature();
-  debugOutput("Temperature: " +String(Temperature)+ " *C", 4);
+  ESP_LOGI("BMP", "Temperature: %s °C", String(Temperature));
 }
 
 
 
-void getSleepModeState()
-{
+void getSleepModeState() {
 
   int sleepModeValue1 = 0;
   int sleepModeValue2 = 0;
   sleepModeValue1 = digitalRead(sleepModePin1);
   sleepModeValue2 = digitalRead(sleepModePin2);
 
-  debugOutput("Sleep PIN: " +String(sleepModePin1)+ " - Value: " +String(sleepModeValue1), 5);
-  debugOutput("Sleep PIN: " +String(sleepModePin2)+ " - Value: " +String(sleepModeValue2), 5);
+  ESP_LOGD("Sleep Mode", "Sleep PIN: %s - Value %s", String(sleepModePin1), String(sleepModeValue1));
+  ESP_LOGD("Sleep Mode", "Sleep PIN: %s - Value %s", String(sleepModePin2), String(sleepModeValue2));
 
   if (sleepModeValue1 == HIGH and sleepModeValue2 == HIGH ) {
     sleepMode = 1;
-    debugOutput("Sleep enabled, Mode " +String(sleepMode), 5);
+    ESP_LOGD("Sleep Mode", "enabled, Mode %s", String(sleepMode));
   } 
   else if (sleepModeValue1 == LOW and sleepModeValue2 == LOW) {
     sleepMode = 0;
-     debugOutput("Sleep disabled ", 5);
+    ESP_LOGD("Sleep Mode", "disabled");
     } 
     else { 
       sleepMode = 2;
-      debugOutput("Sleep enabled, Mode " +String(sleepMode), 5);
+      ESP_LOGD("Sleep Mode", "enabled, Mode %s", String(sleepMode));
     }
 
 }
@@ -392,25 +397,23 @@ void getSleepModeState()
 /*
 Method to print the reason by which ESP32 has been awaken from sleep
 */
-void print_wakeup_reason()
-{
+void print_wakeup_reason() {
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
   switch(wakeup_reason) {
-    case ESP_SLEEP_WAKEUP_EXT0 : debugOutput("Wakeup caused by external signal using RTC_IO", 5); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : debugOutput("Wakeup caused by external signal using RTC_CNTL", 5); break;
-    case ESP_SLEEP_WAKEUP_TIMER : debugOutput("Wakeup caused by timer", 5); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : debugOutput("Wakeup caused by touchpad", 5); break;
-    case ESP_SLEEP_WAKEUP_ULP : debugOutput("Wakeup caused by ULP program", 5); break;
-    default : debugOutput("Wakeup was not caused by deep sleep: " +String(wakeup_reason), 5); break;
+    case ESP_SLEEP_WAKEUP_EXT0 : ESP_LOGD("Wakeup", "caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : ESP_LOGD("Wakeup", "caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : ESP_LOGD("Wakeup", "caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : ESP_LOGD("Wakeup", "caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : ESP_LOGD("Wakeup", "caused by ULP program"); break;
+    default : ESP_LOGD("Wakeup", "was not caused by deep sleep: %s", String(wakeup_reason)); break;
   }
 }
 
 
 
 //Display Readings on OLED
-void displayReadings()
-{
+void displayReadings() {
   display.clearDisplay();
   oledWriteMsg(displayRow1, "RUNNING... Status: OK");
   sprintf(text, "Temperature : %sC", String(Temperature));
@@ -435,13 +438,11 @@ void displayReadings()
     oledWriteMsg(displayRow6, text); 
   }
 
-
   sprintf(text, "LoRa send :%s", String(msgCounter));
   oledWriteMsg(displayRow7, text); 
 }
 
-void getVbat()
-{
+void getVbat() {
   // Battery Voltage
   VBAT = (float)(analogRead(vbatPin)) / 4095*2*3.3*1.1;
   /*
@@ -450,13 +451,12 @@ void getVbat()
   then double it (note above that Adafruit halves the voltage), then multiply that by the reference voltage of the ESP32 which 
   is 3.3V and then vinally, multiply that again by the ADC Reference Voltage of 1100mV.
   */
-  debugOutput("Battery: " +String(VBAT)+ " Volts", 5); 
+  ESP_LOGD("Battery", "%s Volts", String(VBAT)); 
 }
 
 
 //Send data to receiver node using LoRa
-void sendReadings()
-{
+void sendReadings() {
   msgCounter++;
 
   // localAddress as 0xAA
@@ -492,7 +492,7 @@ void sendReadings()
 
   // serialize
   serializeJson(doc, jsonSerial);
-  debugOutput("Jsontext: " +String(jsonSerial), 5);
+  //debugOutput("Jsontext: " +String(jsonSerial), 5);
 
   // Encrypt
   byte enc_iv[BLOCK_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; // iv_block gets written to, provide own fresh copy...
@@ -500,7 +500,7 @@ void sendReadings()
 
   // send ERROR message wenn Packet > 256
   if(encrypted.length() > 240) {
-    debugOutput("LoRa Packet to big", 2);
+    ESP_LOGE("lora", "Packet to big");
     JsonDocument doc;
     char jsonSerial[230];
     JsonArray data = doc["data"].to<JsonArray>();
@@ -511,11 +511,14 @@ void sendReadings()
     serializeJson(doc, encrypted);
   }
 
-  debugOutput("Ciphertext: " +String(encrypted), 5);
-  debugOutput("Ciphertext: " +String(encrypted.length()), 5);
+  ESP_LOGD("Ciphertext", "Data %s ", encrypted);
+  if( digitalRead(debugPin) == HIGH) {
+    Serial.println(String(encrypted));
+  }
+  ESP_LOGD("Ciphertext", "Length %s ", String(encrypted.length()));
 
   //Send LoRa packet to receiver
-  debugOutput("LoRa, begin to send packet to Gateway", 4);
+  ESP_LOGI("Lora", "begin to send packet to Gateway");
   digitalWrite(ledPin, HIGH); 
 
   transmissionState = radio.startTransmit(encrypted);
@@ -533,28 +536,23 @@ void sendReadings()
 
   
   digitalWrite(ledPin, LOW); 
-
-  debugOutput("LoRa, send packet done, message number: " +String(msgCounter), 4);
-
+  ESP_LOGI("Lora", "send packet done, message number: %s", String(msgCounter));
   displayReadings();
 
 }
 
 
 // prepare for sleep
-void do_ready_for_sleep()
-{
+void do_ready_for_sleep() {
   display.dim(true);
   display.clearDisplay();
   radio.sleep();
-
   digitalWrite(pwrPin, LOW);    // disable Power US   
 }
 
 
 //function for fetching All readings at once
-void getReadings()
-{
+void getReadings() {
   getDHTreadings();
   if ( enableBMP == true ) {
     getBMPreadings();
@@ -578,10 +576,9 @@ void getReadings()
 
 
 
-void loop()
-{
+void loop() {
 
-  debugOutput("---", 4);
+  ESP_LOGI("main", "---");
 
   getReadings();
   sendReadings();
@@ -591,16 +588,8 @@ void loop()
   // check sleep mode state
   getSleepModeState();
 
-  // check for sleep mode
-    /**
-    Nomalbetrieb ~40 mA
-    Deep Sleep Mode mit Display=on ~10mA
-    Deep Sleep Mode ~5 mA
-    Zuseatzlich mit LoRa.sleep() ~2mA
-    Wenn Sensor mit Power dann switch-off sensor = ~2mA
-    **/
   if (sleepMode == 1) {
-    debugOutput("Go into deep sleep mode for " +String(DEEP_SLEEP)+ " seconds", 4);
+    ESP_LOGI("main", "Go into deep sleep mode for %s seconds", String(DEEP_SLEEP));
     display.clearDisplay();
     print_sleep_info();
     delay(1 * mS_TO_S_FACTOR); 
@@ -609,7 +598,7 @@ void loop()
     esp_deep_sleep_start();
   } 
   else if (sleepMode == 2) {
-    debugOutput("Go into deep sleep mode for " +String(SLEEP)+ " seconds", 4);
+    ESP_LOGI("main", "Go into deep sleep mode for %s seconds", String(SLEEP));
     display.clearDisplay();
     print_sleep_info();;
     delay(1 * mS_TO_S_FACTOR); 

@@ -52,26 +52,25 @@ void getSensorUSValue() {
 
   // Nun wird der Abstand mittels der aufgenommenen Zeit berechnet
   Abstand = Dauer/58.2;
-  debugOutput("US-Sensor, Abstand: " +String(Abstand), 5);
+  ESP_LOGD("US Sensor", "US-Sensor, Abstand: %s", String(Abstand));
   // Überprüfung ob gemessener Wert innerhalb der zulässingen Entfernung liegt
   if (Abstand >= maximumRange || Abstand <= minimumRange) {
     // Falls nicht wird eine Fehlermeldung ausgegeben.
-    debugOutput("US-Sensor, Abstand ausserhalb des Messbereichs", 2);
+    ESP_LOGE("US Sensor", "US-Sensor, Abstand ausserhalb des Messbereich");
   }
   else {
     // Der berechnete Abstand wird in der seriellen Ausgabe ausgegeben
-    debugOutput("US-Sensor, Der Abstand betraegt: " +String(Abstand)+ " cm", 5);
+    ESP_LOGD("US Sensor", "US-Sensor, Der Abstand betraegt: %s cm", String(Abstand));
   }
 
   sensorValue = Abstand;
   if ( sensorValue > 1 and sensorValue < 8) {
     sensorState = HIGH;
-    debugOutput("US-Sensor, Analog IO - Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } 
   else {
     sensorState = LOW;
-    debugOutput("US-Sensor, Analog IO - Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   }
+  ESP_LOGI("US Sensor", "Analog IO - Sensor value: %s - Sensor state: %s", String(sensorValue), String(sensorState));
 
 }
 
@@ -85,11 +84,10 @@ void getButtonState() {
   // check if the pushbutton is pressed, if it is, the buttonState is HIGH
   if (sensorValue == HIGH) {
     sensorState = HIGH;
-    debugOutput("Digital IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } else {
     sensorState = LOW;
-    debugOutput("Digital IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
   }
+  ESP_LOGI("Press-Button", "Digital IO, Sensor value: %s - Sensor state %", String(sensorValue), String(sensorState));
 }
 
 
@@ -103,13 +101,12 @@ void getButtonState() {
   Analoger Ausgang: Nicht linear zur Entfernung
   Zeit pro Messung: 38.3ms ± 9.6ms
 **/
-float average (int * array, int len)  // assuming array is int.
-{
+float average (int * array, int len) {
   long sum = 0L ;  // sum will be larger than an item, long for safety.
   for (int i = 0 ; i < len ; i++) {
     sum += array [i] ;
   }
-  debugOutput("sum: " +String(sum)+ ", len: " +String(len)+ ", avg as int: " +String( ((int) sum) / len), 5);
+  ESP_LOGD("IR Sensor", "sum: %s, len: %s, avg as int %s", String(sum), String(len), String( ((int) sum) / len));
   return  ((float) sum) / len ;  // average will be fractional, so float may be appropriate.
 }
 
@@ -134,14 +131,12 @@ void getSensorIRState() {
  
   if (sensorValue > 4000) {
     sensorState = LOW;
-    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   }
   else if (sensorValue > 2500) {
     sensorState = HIGH;
-    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4);
   } else {
     sensorState = LOW;
-    debugOutput("Analog IO, Sensor value: " +String(sensorValue)+ " - Sensor state: " +String(sensorState), 4); 
   }
+  ESP_LOGI("IR Sensor", "Analog IO, Sensor value: %s - Sensor state %s", String(sensorValue), String(sensorState));
 }
 

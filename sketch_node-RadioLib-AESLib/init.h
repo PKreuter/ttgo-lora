@@ -12,16 +12,15 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // Instanziier
 
 //Initialize OLED Module
 void initOLED() {
-  debugOutput("Initializing OLED Display", 5);
-  
+  ESP_LOGI("OLED", "Initializing Display");
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c)) { // Address 0x3C for 128x32
-    debugOutput("*SSD1306 allocation failed", 2);
+    ESP_LOGE("OLED", "*SSD1306 allocation failed");
     for (;;)
       ; // Don't proceed, loop forever
   }
 
-  debugOutput(" OLED Display OK!" ,5);
+  ESP_LOGI("OLED", " OK!");
   display.clearDisplay();
   display.display(); // zeigt den Grafikpuffer auf dem OLED-Display
   display.setTextColor(WHITE);
@@ -49,9 +48,9 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 //Initialize DHT Sensor
 void initDHT() {
   // Initialize DHT device.
-  debugOutput("Initializing DHT Sensor", 5);
+  ESP_LOGI("DHT Sensor", "Initializing Sensor");
   dht.begin();
-  debugOutput(" DHT Sensor is OK!", 5);
+  ESP_LOGI("DHT Sensor", "  OK");
 }
 
 
@@ -71,13 +70,13 @@ Adafruit_BMP280 bmp;     // Communication via I2C
 
 //Initialize BMP280 Sensor
 void initBMP() {
-  debugOutput("Initializing BMP280 Sensor", 5);
+  ESP_LOGI("BMP280 Sensor", "Initializing Sensor");
   if (!bmp.begin()) {  
-    debugOutput(" Could not find a valid BMP280 !", 2);
+    ESP_LOGE("BMP280 Sensor", "Could not find a valid BMP280!");
     while (1);
   }
   else {
-    debugOutput(" BMP280 is OK!", 5);
+    ESP_LOGI("BMP280 Sensor", " OK!");
   }
   bmp.takeForcedMeasurement();
 

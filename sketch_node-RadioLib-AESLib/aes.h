@@ -36,7 +36,7 @@ String decrypt_impl(char * msg, byte iv[]) {
 
 // Generate IV (once)
 void aes_init() {
-  debugOutput("AES Init", 5);
+  ESP_LOGD("AES", "Init...");
   aesLib.gen_iv(aes_iv);
 }
 

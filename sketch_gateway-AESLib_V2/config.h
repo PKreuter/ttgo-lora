@@ -9,9 +9,19 @@ IDE
 - ESP32C6 Dev Module
 - Flash Size 8MB
 - Partition Scheme 8MB
-- Tools > USB CDC On Boot > Enabled
+- Tools > USB CDC On Boot > Disabled
 
-
+     4 : GPIO
+     5 : GPIO
+     6 : I2C_MASTER_SDA[0]
+     7 : I2C_MASTER_SCL[0]
+     8 : GPIO
+    11 : GPIO
+    16 : UART_TX[0]
+    17 : UART_RX[0]
+    19 : SPI_MASTER_MOSI[0]
+    20 : SPI_MASTER_MISO[0]
+    21 : SPI_MASTER_SCK[0]
 
 **/
 

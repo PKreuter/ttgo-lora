@@ -16,8 +16,7 @@ AESLib aesLib;
 char ciphertext[2*BUFFER_LIMIT] = {0}; // THIS IS BUFFER FOR ENCRYPTED DATA
 
 
-String encrypt_impl(char * msg, byte iv[])
-{
+String encrypt_impl(char * msg, byte iv[]) {
   int msgLen = strlen(msg);
   char encrypted[2 * msgLen] = {0};
   aesLib.encrypt64((const byte*)msg, msgLen, encrypted, aes_key, sizeof(aes_key), iv);
@@ -25,8 +24,7 @@ String encrypt_impl(char * msg, byte iv[])
 }
 
 
-String decrypt_impl(char * msg, byte iv[])
-{
+String decrypt_impl(char * msg, byte iv[]) {
   int msgLen = strlen(msg);
   char decrypted[msgLen] = {0}; // half may be enough
   aesLib.decrypt64(msg, msgLen, (byte*)decrypted, aes_key, sizeof(aes_key), iv);
@@ -35,9 +33,8 @@ String decrypt_impl(char * msg, byte iv[])
 
 
 // Generate IV (once)
-void aes_init()
-{
-  debugOutput("Initializing AES\n", 5);
+void aes_init() {
+  ESP_LOGD("aes", "Initializing...");
   aesLib.gen_iv(aes_iv);
 }
 

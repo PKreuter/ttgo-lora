@@ -1,28 +1,25 @@
+/**
 
 
 
-
-
-
+**/
 
 //Version
 const PROGMEM char* VERSION = "0.045";
 
-
 //LoRa Destination Adress / send to
 byte destination = 0xAA; 
-
 
 // Speed Serial Monitor
 #define BAUD 115200
 
-const int SLEEP = 60;         // seconds to Sleep
+//const int SLEEP = 60;         // seconds to Sleep
+const int SLEEP = 300;         // seconds to Sleep
 const int DEEP_SLEEP = 900;   // seconds to Sleep, Default 900
 
 // both false = USSensor
 bool enableButton = false;
 bool enableIRSensor = true;
-
 
 // SPI
 #define SCK 5
@@ -34,7 +31,6 @@ bool enableIRSensor = true;
 #define SPI_LORA_DIO0 26
 #define SPI_LORA_RST 23
 #define SPI_LORA_DIO0 3
-
 
 /*
 Der Spreading Factor (SF) beschreibt dabei wieviele Chirps, also Daten Carrier pro Sekunde übertragen werden. 

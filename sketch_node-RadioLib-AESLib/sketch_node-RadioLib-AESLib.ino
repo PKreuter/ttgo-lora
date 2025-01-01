@@ -222,13 +222,13 @@ void initRadioSX() {
 }
 
 
-
 void showVersion() {
   sprintf(text, "Version %s", String(VERSION));
   oledWriteMsg(0, text);
   sprintf(text, "LoRa Node 0x%s", String(localAddress, HEX));
   oledWriteMsg(10, text);
 }
+
 
 // flag to indicate that a packet was sent or received
 volatile bool operationDone = false;
@@ -533,7 +533,6 @@ void sendReadings() {
   LoRa.endPacket();
   //LoRa.endPacket(true); // true = async / non-blocking mode
   **/
-
   
   digitalWrite(ledPin, LOW); 
   ESP_LOGI("Lora", "send packet done, message number: %s", String(msgCounter));

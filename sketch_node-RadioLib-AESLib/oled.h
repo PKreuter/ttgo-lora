@@ -1,7 +1,4 @@
 
-
-
-
 // OLED helper
 
 //--
@@ -15,7 +12,6 @@ void oledClearRow(int row) {
 }
 
 
-
 // Write row/line
 void oledWriteMsg(int row, char msg[30]) {
   display.setTextColor(WHITE, BLACK);
@@ -24,6 +20,7 @@ void oledWriteMsg(int row, char msg[30]) {
   display.print(msg);
   display.display();
 }
+
 
 // Write row/line
 void oledClearWriteMsg(int row, char msg[30]) {

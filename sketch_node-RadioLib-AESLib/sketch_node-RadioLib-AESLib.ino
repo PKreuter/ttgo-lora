@@ -418,7 +418,7 @@ void displayReadings() {
   oledWriteMsg(displayRow1, "RUNNING... Status: OK");
   sprintf(text, "Temperature : %sC", String(Temperature));
   oledWriteMsg(displayRow2, text);
-  sprintf(text, "Humidity(%) : %sRh", String(Humidity));
+  sprintf(text, "Humidity : %s Rh", String(Humidity));
   oledWriteMsg(displayRow3, text);
   sprintf(text, "Pressure : %s mmHg", String(Pressure));
   oledWriteMsg(displayRow4, text);
